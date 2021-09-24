@@ -1,9 +1,9 @@
 '''
 stack machine translator
 '''
+from typing import List
 
-
-def parse(lines: list[str]):
+def parse(lines: List[str], file_name: str):
     line_processed = []
 
     for line in lines:
@@ -39,6 +39,62 @@ def parse(lines: list[str]):
         elif line.startswith('push constant '):
             line_processed.extend(
                 push_constant(line.lstrip('push constant '))
+            )
+        elif line.startswith('push local '):
+            line_processed.extend(
+                push_local(line.lstrip('push local '))
+            )
+        elif line.startswith('pop local '):
+            line_processed.extend(
+                pop_local(line.lstrip('pop local '))
+            )
+        elif line.startswith('push argument '):
+            line_processed.extend(
+                push_argument(line.lstrip('push argument '))
+            )
+        elif line.startswith('pop argument '):
+            line_processed.extend(
+                pop_argument(line.lstrip('pop argument '))
+            )
+        elif line.startswith('push this '):
+            line_processed.extend(
+                push_this(line.lstrip('push this '))
+            )
+        elif line.startswith('pop this '):
+            line_processed.extend(
+                pop_this(line.lstrip('pop this '))
+            )
+        elif line.startswith('push that '):
+            line_processed.extend(
+                push_that(line.lstrip('push that '))
+            )
+        elif line.startswith('pop that '):
+            line_processed.extend(
+                pop_that(line.lstrip('pop that '))
+            )
+        elif line.startswith('push temp '):
+            line_processed.extend(
+                push_temp(line.lstrip('push temp '))
+            )
+        elif line.startswith('pop temp '):
+            line_processed.extend(
+                pop_temp(line.lstrip('pop temp '))
+            )
+        elif line.startswith('push pointer '):
+            line_processed.extend(
+                push_pointer(line.lstrip('push pointer '))
+            )
+        elif line.startswith('pop pointer '):
+            line_processed.extend(
+                pop_pointer(line.lstrip('pop pointer '))
+            )
+        elif line.startswith('push static '):
+            line_processed.extend(
+                push_static(line.lstrip('push static '), file_name)
+            )
+        elif line.startswith('pop static '):
+            line_processed.extend(
+                pop_static(line.lstrip('pop static '), file_name)
             )
 
     return line_processed
@@ -473,12 +529,13 @@ def pop_that(index):
 
 
 def push_temp(index):
+    index_int = int(index)
     index_str = str(index)
     return [
         '// push temp ' + index_str,
 
         # D = *(temp + i)
-        '@' + str(5 + index),
+        '@' + str(5 + index_int),
         'D=M',
 
         # *stack = D
@@ -493,6 +550,7 @@ def push_temp(index):
 
 
 def pop_temp(index):
+    index_int = int(index)
     index_str = str(index)
     return [
         '// pop temp ' + index_str,
@@ -504,16 +562,16 @@ def pop_temp(index):
         'D=M',
 
         # *(temp + i) = D
-        '@' + str(5 + index),
+        '@' + str(5 + index_int),
         'M=D',
     ]
 
 
 def push_pointer(value):
     value_str = str(value)
-    if value == 0:
+    if value_str == '0':
         R = 'R3'
-    elif value == 1:
+    elif value_str == '1':
         R = 'R4'
     else:
         raise Exception()
@@ -534,11 +592,12 @@ def push_pointer(value):
         'M=M+1',
     ]
 
+
 def pop_pointer(value):
     value_str = str(value)
-    if value == 0:
+    if value_str == '0':
         R = 'R3'
-    elif value == 1:
+    elif value_str == '1':
         R = 'R4'
     else:
         raise Exception()
@@ -558,8 +617,39 @@ def pop_pointer(value):
         'M=D'
     ]
 
-def push_static(index):
+
+def push_static(index, file_name: str):
     index_str = str(index)
     return [
-        
+        '// push static ' + index_str,
+
+        # D = static
+        '@' + file_name + '.' + index_str,
+        'D=M',
+
+        # *(stack++) = D
+        '@R0',
+        'A=M',
+        'M=D',
+        '@R0',
+        'M=M+1',
     ]
+
+
+def pop_static(index, file_name: str):
+    index_str = str(index)
+    return [
+        '// pop static ' + index_str,
+
+        # D = *(--stack)
+        '@R0',
+        'M=M-1',
+        'A=M',
+        'D=M',
+
+        # static = D
+        '@' + file_name + '.' + index_str,
+        'M=D'
+    ]
+
+
