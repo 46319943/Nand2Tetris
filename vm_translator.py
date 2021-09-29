@@ -3,8 +3,12 @@ stack machine translator
 '''
 from typing import List
 
+function_ret_count_map = {}
+
+
 def parse(lines: List[str], file_name: str):
     line_processed = []
+    current_function_name = ''
 
     for line in lines:
 
@@ -96,6 +100,25 @@ def parse(lines: List[str], file_name: str):
             line_processed.extend(
                 pop_static(line.lstrip('pop static '), file_name)
             )
+        elif line.startswith('label '):
+            line_processed.extend(
+                label(line.lstrip('label '))
+            )
+        elif line.startswith('goto '):
+            line_processed.extend(
+                goto(line.lstrip('goto '))
+            )
+        elif line.startswith('if-goto '):
+            line_processed.extend(
+                if_goto(line.lstrip('if-goto '))
+            )
+        elif line.startswith('function '):
+            current_function_name = line.strip(' ').split(' ')[1]
+
+            pass
+        elif line.startswith('call '):
+            _, function_name, argument_count = line.strip(' ').split(' ')
+            call(function_name, argument_count, current_function_name)
 
     return line_processed
 
@@ -653,3 +676,109 @@ def pop_static(index, file_name: str):
     ]
 
 
+def label(name):
+    return [
+        '// label ' + name,
+
+        f'({name})'
+    ]
+
+
+def goto(name):
+    return [
+        '// goto ' + name,
+
+        '@' + name,
+        '0;JMP',
+    ]
+
+
+def if_goto(name):
+    return [
+        '// if-goto ' + name,
+
+        # D = *(--stack)
+        '@R0',
+        'M=M-1',
+        'A=M',
+        'D=M',
+
+        # JMP to name if not false (D != 0)
+        '@' + name,
+        'D;JNE',
+
+    ]
+
+
+def call(function_name, argument_count, current_function_name):
+    ret_addr_label = current_function_name + '$ret.' + str(
+        function_ret_count_map.get(current_function_name, 1)
+    )
+
+    return [
+        '// call ' + function_name + ' ' + argument_count,
+
+        # push retAddrLabel
+        '@' + ret_addr_label,
+        'D=A',
+        '@R0',
+        'A=M',
+        'M=D',
+        '@R0',
+        'M=M+1',
+
+        # push LCL
+        '@R1',
+        'D=A',
+        '@R0',
+        'A=M',
+        'M=D',
+        '@R0',
+        'M=M+1',
+
+        # push ARG
+        '@R2',
+        'D=A',
+        '@R0',
+        'A=M',
+        'M=D',
+        '@R0',
+        'M=M+1',
+
+        # push THIS
+        '@R3',
+        'D=A',
+        '@R0',
+        'A=M',
+        'M=D',
+        '@R0',
+        'M=M+1',
+
+        # push THAT
+        '@R4',
+        'D=A',
+        '@R0',
+        'A=M',
+        'M=D',
+        '@R0',
+        'M=M+1',
+
+        # ARG = SP-5-nArgs
+        '@R0',
+        'D=M',
+        'D=D-' + str(5 + int(argument_count)),
+        '@R2',
+        'M=D',
+
+        # LCL = SP
+        '@R0',
+        'D=M',
+        '@R1',
+        'M=D',
+
+        # goto functionName
+        '@' + function_name,
+        '0;JMP',
+
+        f'({ret_addr_label})',
+    ]
