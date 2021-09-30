@@ -102,23 +102,30 @@ def parse(lines: List[str], file_name: str):
             )
         elif line.startswith('label '):
             line_processed.extend(
-                label(line.lstrip('label '))
+                label(line.lstrip('label '), file_name, current_function_name)
             )
         elif line.startswith('goto '):
             line_processed.extend(
-                goto(line.lstrip('goto '))
+                goto(line.lstrip('goto '), file_name, current_function_name)
             )
         elif line.startswith('if-goto '):
             line_processed.extend(
-                if_goto(line.lstrip('if-goto '))
+                if_goto(line.lstrip('if-goto '), file_name, current_function_name)
             )
         elif line.startswith('function '):
-            current_function_name = line.strip(' ').split(' ')[1]
-
-            pass
+            _, current_function_name, local_variable_count = line.strip(' ').split(' ')
+            line_processed.extend(
+                function(current_function_name, local_variable_count)
+            )
         elif line.startswith('call '):
             _, function_name, argument_count = line.strip(' ').split(' ')
-            call(function_name, argument_count, current_function_name)
+            line_processed.extend(
+                call(function_name, argument_count, current_function_name)
+            )
+        elif line.startswith('return'):
+            line_processed.extend(
+                function_return()
+            )
 
     return line_processed
 
@@ -585,7 +592,7 @@ def pop_temp(index):
         'D=M',
 
         # *(temp + i) = D
-        '@' + str(5 + index_int),
+        '@R' + str(5 + index_int),
         'M=D',
     ]
 
@@ -676,7 +683,12 @@ def pop_static(index, file_name: str):
     ]
 
 
-def label(name):
+def label(name, file_name, current_function_name):
+    if current_function_name == '':
+        name = file_name + '$' + name
+    else:
+        name = file_name + '.' + current_function_name + '$' + name
+
     return [
         '// label ' + name,
 
@@ -684,7 +696,12 @@ def label(name):
     ]
 
 
-def goto(name):
+def goto(name, file_name, current_function_name):
+    if current_function_name == '':
+        name = file_name + '$' + name
+    else:
+        name = file_name + '.' + current_function_name + '$' + name
+
     return [
         '// goto ' + name,
 
@@ -693,7 +710,12 @@ def goto(name):
     ]
 
 
-def if_goto(name):
+def if_goto(name, file_name, current_function_name):
+    if current_function_name == '':
+        name = file_name + '$' + name
+    else:
+        name = file_name + '.' + current_function_name + '$' + name
+
     return [
         '// if-goto ' + name,
 
@@ -711,12 +733,14 @@ def if_goto(name):
 
 
 def call(function_name, argument_count, current_function_name):
+    argument_count = int(argument_count)
     ret_addr_label = current_function_name + '$ret.' + str(
         function_ret_count_map.get(current_function_name, 1)
     )
+    function_ret_count_map[current_function_name] = function_ret_count_map.get(current_function_name, 1) + 1
 
     return [
-        '// call ' + function_name + ' ' + argument_count,
+        '// call ' + function_name + ' ' + str(argument_count),
 
         # push retAddrLabel
         '@' + ret_addr_label,
@@ -729,7 +753,7 @@ def call(function_name, argument_count, current_function_name):
 
         # push LCL
         '@R1',
-        'D=A',
+        'D=M',
         '@R0',
         'A=M',
         'M=D',
@@ -738,7 +762,7 @@ def call(function_name, argument_count, current_function_name):
 
         # push ARG
         '@R2',
-        'D=A',
+        'D=M',
         '@R0',
         'A=M',
         'M=D',
@@ -747,7 +771,7 @@ def call(function_name, argument_count, current_function_name):
 
         # push THIS
         '@R3',
-        'D=A',
+        'D=M',
         '@R0',
         'A=M',
         'M=D',
@@ -756,7 +780,7 @@ def call(function_name, argument_count, current_function_name):
 
         # push THAT
         '@R4',
-        'D=A',
+        'D=M',
         '@R0',
         'A=M',
         'M=D',
@@ -764,9 +788,10 @@ def call(function_name, argument_count, current_function_name):
         'M=M+1',
 
         # ARG = SP-5-nArgs
+        '@' + str(5 + argument_count),
+        'D=A',
         '@R0',
-        'D=M',
-        'D=D-' + str(5 + int(argument_count)),
+        'D=M-D',
         '@R2',
         'M=D',
 
@@ -781,4 +806,117 @@ def call(function_name, argument_count, current_function_name):
         '0;JMP',
 
         f'({ret_addr_label})',
+    ]
+
+
+def function(function_name, local_variable_count):
+    local_variable_count = int(local_variable_count)
+
+    push_0 = [
+        '@0',
+        'D=A',
+        '@R0',
+        'A=M',
+        'M=D',
+        '@R0',
+        'M=M+1',
+    ]
+
+    return [
+               '// function ' + function_name + ' ' + str(local_variable_count),
+
+               f'({function_name})',
+
+           ] + push_0 * local_variable_count
+
+
+def function_return():
+    return [
+        '// return',
+
+        # *R13 = endFrame = LCL
+        '@R1',
+        'D=M',
+        '@R13',
+        'M=D',
+
+        # *R14 = retAddr = *(endFrame - 5)
+        '@5',
+        'D=A',
+        '@R13',
+        'A=M-D',
+        'D=M',
+        '@R14',
+        'M=D',
+
+        # *ARG = pop()
+        '@R0',
+        'A=M-1',
+        'D=M',
+        '@R2',
+        'A=M',
+        'M=D',
+
+        # SP = ARG + 1
+        '@R2',
+        'D=M+1',
+        '@R0',
+        'M=D',
+
+        # THAT = *(endFrame - 1)
+        '@R13',
+        'A=M-1',
+        'D=M',
+        '@R4',
+        'M=D',
+
+        # THIS = *(endFrame - 2)
+        '@2',
+        'D=A',
+        '@R13',
+        'A=M-D',
+        'D=M',
+        '@R3',
+        'M=D',
+
+        # ARG = *(endFrame - 3)
+        '@3',
+        'D=A',
+        '@R13',
+        'A=M-D',
+        'D=M',
+        '@R2',
+        'M=D',
+
+        # LCL = *(endFrame - 4)
+        '@4',
+        'D=A',
+        '@R13',
+        'A=M-D',
+        'D=M',
+        '@R1',
+        'M=D',
+
+        # goto retAddr
+        '@R14',
+        'A=M',
+        '0;JMP',
+    ]
+
+
+def booting():
+    return [
+        '// booting',
+
+        # SP = 256
+        '@256',
+        'D=A',
+        '@R0',
+        'M=D',
+
+        # call Sys.init
+        *call('Sys.init', 0, 'booting'),
+
+        # '@Sys.init',
+        # '0;JMP'
     ]
