@@ -399,7 +399,148 @@ def compile_statements(token_element_list: List[Element], require=True):
 
     while True:
         statement_keyword = token_element_list[-1]
-        if statement_keyword.tag != 'keyword':
-            raise Exception('statement keyword require')
+        if statement_keyword.tag != 'keyword' and statement_keyword.text not in ['let', 'if', 'while', 'do', 'return']:
+            return None
 
     return statements_element
+
+
+def compile_let_statement(token_element_list: List[Element], require=True):
+    let_statement_element = Element('letStatement')
+
+    let_statement_element.append(
+        compile_keyword(token_element_list, 'let', require=True)
+    )
+
+    let_statement_element.append(
+        compile_identifier(token_element_list, require=True)
+    )
+
+    pass
+
+
+def compile_expression_list(token_element_list: List[Element]):
+    expression_list_element = Element('expressionList')
+
+    while True:
+        expresstion_element = compile_expression(token_element_list, require=False)
+        if expresstion_element is None:
+            break
+        expression_list_element.append(expresstion_element)
+
+    return expression_list_element
+
+
+def compile_expression(token_element_list: List[Element], require=True):
+    expression_element = Element('expression')
+    term_element = compile_term(token_element_list, require=False)
+    if term_element is None:
+        if require:
+            raise Exception('term not match')
+        else:
+            return None
+    expression_element.append(term_element)
+
+    while True:
+        op_element = compile_symbol(token_element_list, ['+', '-', '*', '/', '&', '|', '<', '>', '='], require=False)
+        if op_element is None:
+            break
+
+        expression_element.append(op_element)
+        expression_element.append(
+            compile_term(token_element_list, require=True)
+        )
+
+    return expression_element
+
+
+def compile_term(token_element_list: List[Element], require=True):
+    term_element = Element('term')
+    term_token = token_element_list[-1]
+    term_element.append(term_token)
+
+    if term_token.tag in ['integerConstant', 'stringConstant']:
+        pass
+
+    elif term_token.tag == 'keyword':
+        if term_token.text not in ['true', 'false', 'null', 'this']:
+            if require:
+                raise Exception('keyword constant text not match')
+            else:
+                return None
+
+    elif term_token.tag == 'identifier':
+
+        # LL(2)
+        next_token = token_element_list[-2]
+
+        # varName
+        if next_token.tag != 'keyword':
+            pass
+
+        # varName[expression]
+        elif next_token.text == '[':
+            term_element.append(
+                compile_symbol(token_element_list, '[', require=True)
+            )
+            term_element.append(
+                compile_expression(token_element_list, require=True)
+            )
+            term_element.append(
+                compile_symbol(token_element_list, ']', require=True)
+            )
+        # subroutineCall
+        elif next_token.text == '(':
+            term_element.append(
+                compile_symbol(token_element_list, '(', require=True)
+            )
+            term_element.append(
+                compile_expression_list(token_element_list, require=True)
+            )
+            term_element.append(
+                compile_symbol(token_element_list, ')', require=True)
+            )
+        # class.subroutineCall
+        elif next_token.text == '.':
+            term_element.append(
+                compile_symbol(token_element_list, '.', require=True)
+            )
+            term_element.append(
+                compile_identifier(token_element_list, require=True)
+            )
+            term_element.append(
+                compile_symbol(token_element_list, '(', require=True)
+            )
+            term_element.append(
+                compile_expression_list(token_element_list, require=True)
+            )
+            term_element.append(
+                compile_symbol(token_element_list, ')', require=True)
+            )
+        # varName
+        else:
+            pass
+
+    elif term_token.tag == 'symbol':
+        if term_token.text == '(':
+            term_element.append(
+                compile_expression(token_element_list, require=True)
+            )
+            term_element.append(
+                compile_symbol(token_element_list, ')', require=True)
+            )
+        elif term_token.text in ['-', '~']:
+            pass
+        else:
+            if require:
+                raise Exception('term symbol text not match')
+            else:
+                return None
+    else:
+        if require:
+            raise Exception('unsupported term')
+        else:
+            return None
+
+    token_element_list.pop()
+    return term_element
