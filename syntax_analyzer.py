@@ -124,21 +124,19 @@ def parse(ele_tree: ElementTree):
 def compile_class(token_element_list: List[Element]):
     class_element = Element('class')
 
-    class_keyword = token_element_list.pop()
-    if class_keyword.tag != 'keyword' or class_keyword.text != 'class':
-        token_element_list.append(class_keyword)
+    class_keyword = compile_keyword(token_element_list, 'class', require=False)
+
+    if class_keyword is None:
         return None
     class_element.append(class_keyword)
 
-    class_identifier = token_element_list.pop()
-    if class_identifier.tag != 'identifier':
-        raise Exception('class identifier mismatch')
-    class_element.append(class_identifier)
+    class_element.append(
+        compile_identifier(token_element_list, require=True)
+    )
 
-    left_braces_symbol = token_element_list.pop()
-    if left_braces_symbol.tag != 'symbol' or left_braces_symbol.text != '{':
-        raise Exception('class left braces symbol mismatch')
-    class_element.append(left_braces_symbol)
+    class_element.append(
+        compile_symbol(token_element_list, '{', require=True)
+    )
 
     while True:
         class_var_dec_element = compile_class_var_dec(token_element_list)
@@ -152,10 +150,9 @@ def compile_class(token_element_list: List[Element]):
             break
         class_element.append(class_subroutine_dec_element)
 
-    right_braces_symbol = token_element_list.pop()
-    if right_braces_symbol.tag != 'symbol' or right_braces_symbol.text != '}':
-        raise Exception('class right braces symbol mismatch')
-    class_element.append(right_braces_symbol)
+    class_element.append(
+        compile_symbol(token_element_list, '}', require=True)
+    )
 
     return class_element
 
@@ -163,24 +160,18 @@ def compile_class(token_element_list: List[Element]):
 def compile_class_var_dec(token_element_list: List[Element]):
     class_var_dec_element = Element('classVarDec')
 
-    static_or_field_keyword = token_element_list.pop()
-    if static_or_field_keyword.tag != 'keyword' or (static_or_field_keyword.text not in ['static', 'field']):
-        token_element_list.append(static_or_field_keyword)
+    static_or_field_keyword = compile_keyword(token_element_list, ['static', 'field'], require=False)
+    if static_or_field_keyword is None:
         return None
     class_var_dec_element.append(static_or_field_keyword)
 
-    type_keyword_or_identifier = token_element_list.pop()
-    if type_keyword_or_identifier.tag == 'keyword' and (
-            type_keyword_or_identifier.text not in ['int', 'char', 'boolean']):
-        raise Exception('type keyword text not match')
-    elif type_keyword_or_identifier.tag != 'identifier':
-        raise Exception('type tag not match identifier')
-    class_var_dec_element.append(type_keyword_or_identifier)
+    class_var_dec_element.append(
+        compile_type(token_element_list, require=True)
+    )
 
-    var_name_identifier = token_element_list.pop()
-    if var_name_identifier.tag != 'identifier':
-        raise Exception('var name identifier not match')
-    class_var_dec_element.append(var_name_identifier)
+    class_var_dec_element.append(
+        compile_identifier(token_element_list, require=True)
+    )
 
     while True:
         comma_or_semicolon_symbol = token_element_list.pop()
