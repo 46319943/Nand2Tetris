@@ -14,3 +14,13 @@ Using Nand gate (and DFF) to build a computer
 - 对高级语言的语法进行分析
 - Tokenizer
 - Parser
+
+```
+” “	Double quotation marks
+’ ‘	Single quotation marks
+{ }	Opening and closing braces
+( )	Opening and closing parentheses
+[ ]	Opening and closing brackets
+//	Double slashes
+;	Semicolon
+```
