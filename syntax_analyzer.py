@@ -121,6 +121,72 @@ def parse(ele_tree: ElementTree):
     )
 
 
+def compile_keyword(token_element_list: List[Element], keyword_limit: Union[str, List[str]], require=True):
+    keyword_token = token_element_list[-1]
+
+    if keyword_token.tag != 'keyword':
+        if require:
+            raise Exception('keyword require')
+        else:
+            return None
+
+    if keyword_token.text not in keyword_limit:
+        if require:
+            raise Exception('keyword text not match')
+        else:
+            return None
+
+    return token_element_list.pop()
+
+
+def compile_symbol(token_element_list: List[Element], symbol_limit: Union[str, List[str]], require=True):
+    symbol_token = token_element_list[-1]
+
+    if symbol_token.tag != 'symbol':
+        if require:
+            raise Exception('symbol require')
+        else:
+            return None
+
+    if symbol_token.text not in symbol_limit:
+        if require:
+            raise Exception('symbol text not match')
+        else:
+            return None
+
+    return token_element_list.pop()
+
+
+def compile_identifier(token_element_list: List[Element], require=True):
+    identifier_token = token_element_list[-1]
+
+    if identifier_token.tag != 'identifier':
+        if require:
+            raise Exception('identifier require')
+        else:
+            return None
+
+    return token_element_list.pop()
+
+
+def compile_type(token_element_list: List[Element], require=True):
+    type_keyword_or_identifier = token_element_list[-1]
+
+    if type_keyword_or_identifier.tag == 'keyword' and (
+            type_keyword_or_identifier.text not in ['int', 'char', 'boolean']):
+        if require:
+            raise Exception('type keyword text not match')
+        else:
+            return None
+    elif type_keyword_or_identifier.tag != 'identifier':
+        if require:
+            raise Exception('type identifier tag not match')
+        else:
+            return None
+
+    return token_element_list.pop()
+
+
 def compile_class(token_element_list: List[Element]):
     class_element = Element('class')
 
@@ -174,24 +240,21 @@ def compile_class_var_dec(token_element_list: List[Element]):
     )
 
     while True:
-        comma_or_semicolon_symbol = token_element_list.pop()
-        if comma_or_semicolon_symbol.tag != 'symbol':
-            raise Exception('comma or semicolon symbol not match')
-        if comma_or_semicolon_symbol.text == ',':
-            class_var_dec_element.append(comma_or_semicolon_symbol)
-
-            var_name_identifier = token_element_list.pop()
-            if var_name_identifier.tag != 'identifier':
-                raise Exception('var name identifier not match')
-            class_var_dec_element.append(var_name_identifier)
-
-            continue
-
-        elif comma_or_semicolon_symbol.text == ';':
-            class_var_dec_element.append(comma_or_semicolon_symbol)
+        comma_symbol = compile_symbol(
+            token_element_list, ',', require=False
+        )
+        if comma_symbol is None:
             break
-        else:
-            raise Exception('comma or semicolon text not match')
+
+        class_var_dec_element.append(comma_symbol)
+        class_var_dec_element.append(
+            compile_identifier(token_element_list, require=True)
+        )
+        continue
+
+    class_var_dec_element.append(
+        compile_symbol(token_element_list, ';', require=True)
+    )
 
     return class_var_dec_element
 
@@ -199,13 +262,11 @@ def compile_class_var_dec(token_element_list: List[Element]):
 def compile_subroutine_dec(token_element_list: List[Element]):
     class_subroutine_dec_element = Element('subroutineDec')
 
-    constructor_or_function_or_method_keyword = token_element_list.pop()
-    if constructor_or_function_or_method_keyword.tag != 'keyword' or (
-            constructor_or_function_or_method_keyword.text not in ['constructor', 'function', 'method']
-    ):
-        token_element_list.append(constructor_or_function_or_method_keyword)
+    constructor_or_function_or_method_keyword = compile_keyword(
+        token_element_list, ['constructor', 'function', 'method'], require=False
+    )
+    if constructor_or_function_or_method_keyword is None:
         return None
-        # raise Exception('constructor function method not match')
     class_subroutine_dec_element.append(constructor_or_function_or_method_keyword)
 
     void_or_type_keyword_or_identifier = token_element_list.pop()
@@ -216,15 +277,13 @@ def compile_subroutine_dec(token_element_list: List[Element]):
         raise Exception('type tag not match identifier')
     class_subroutine_dec_element.append(void_or_type_keyword_or_identifier)
 
-    subroutine_name_identifier = token_element_list.pop()
-    if subroutine_name_identifier.tag != 'identifier':
-        raise Exception('subroutine name tag not match identifier')
-    class_subroutine_dec_element.append(subroutine_name_identifier)
+    class_subroutine_dec_element.append(
+        compile_identifier(token_element_list, require=True)
+    )
 
-    left_parentheses_symbol = token_element_list.pop()
-    if left_parentheses_symbol.tag != 'symbol' or left_parentheses_symbol.text != '(':
-        raise Exception('subroutine dec left parentheses not match')
-    class_subroutine_dec_element.append(left_parentheses_symbol)
+    class_subroutine_dec_element.append(
+        compile_symbol(token_element_list, '(', require=True)
+    )
 
     parameter_list_element = compile_parameter_list(token_element_list)
     if parameter_list_element is not None:
@@ -235,89 +294,10 @@ def compile_subroutine_dec(token_element_list: List[Element]):
     )
 
     class_subroutine_dec_element.append(
-        compile
+        compile_subroutine_body(token_element_list)
     )
 
     return class_subroutine_dec_element
-
-
-def compile_subroutine_body(token_element_list: List[Element]):
-    subroutine_body_element = Element('subroutineBody')
-
-    subroutine_body_element.append(
-        compile_symbol(token_element_list, '{', require=True)
-    )
-
-    subroutine_body_element.append(
-        compile_statements(token_element_list, require=True)
-    )
-
-    subroutine_body_element.append(
-        compile_symbol(token_element_list, '}', require=True)
-    )
-
-    return subroutine_body_element
-
-
-def compile_statements(token_element_list: List[Element], require=True):
-    statements_element = Element('statements')
-
-    return statements_element
-
-
-def compile_var_dec(token_element_list: List[Element], require=True):
-    var_dec_element = Element('varDec')
-
-    var_keyword = compile_keyword(token_element_list, 'var', require=False)
-    if var_keyword is None:
-        if require:
-            raise Exception('var keyword require')
-        else:
-            return None
-
-    var_dec_element.append(
-        var_dec_element
-    )
-
-    var_dec_element.append(
-        compile_type(token_element_list, require=True)
-    )
-
-    var_dec_element.append(
-        compile_identifier(token_element_list, require=True)
-    )
-
-    while True:
-        comma_symbol = compile_symbol(token_element_list, ',', require=False)
-        if comma_symbol is None:
-            break
-        var_dec_element.append(comma_symbol)
-        var_dec_element.append(
-            compile_type(token_element_list, require=True)
-        )
-        var_dec_element.append(
-            compile_identifier(token_element_list, require=True)
-        )
-
-    return var_dec_element
-
-
-def compile_type(token_element_list: List[Element], require=True):
-    type_keyword_or_identifier = token_element_list[-1]
-
-    if type_keyword_or_identifier.tag == 'keyword' and (
-            type_keyword_or_identifier.text not in ['int', 'char', 'boolean']):
-        if require:
-            raise Exception('type keyword text not match')
-        else:
-            return None
-    elif type_keyword_or_identifier.tag != 'identifier':
-        if require:
-            raise Exception('type identifier tag not match')
-        else:
-            return None
-
-    return token_element_list.pop()
 
 
 def compile_parameter_list(token_element_list: List[Element]):
@@ -355,49 +335,71 @@ def compile_parameter_list(token_element_list: List[Element]):
     return parameter_list_element
 
 
-def compile_identifier(token_element_list: List[Element], require=True):
-    identifier_token = token_element_list[-1]
+def compile_subroutine_body(token_element_list: List[Element]):
+    subroutine_body_element = Element('subroutineBody')
 
-    if identifier_token.tag != 'identifier':
+    subroutine_body_element.append(
+        compile_symbol(token_element_list, '{', require=True)
+    )
+
+    subroutine_body_element.append(
+        compile_statements(token_element_list, require=True)
+    )
+
+    subroutine_body_element.append(
+        compile_symbol(token_element_list, '}', require=True)
+    )
+
+    return subroutine_body_element
+
+
+def compile_var_dec(token_element_list: List[Element], require=True):
+    var_dec_element = Element('varDec')
+
+    var_keyword = compile_keyword(token_element_list, 'var', require=False)
+    if var_keyword is None:
         if require:
-            raise Exception('identifier require')
+            raise Exception('var keyword require')
         else:
             return None
 
-    return token_element_list.pop()
+    var_dec_element.append(
+        var_dec_element
+    )
+
+    var_dec_element.append(
+        compile_type(token_element_list, require=True)
+    )
+
+    var_dec_element.append(
+        compile_identifier(token_element_list, require=True)
+    )
+
+    while True:
+        comma_symbol = compile_symbol(token_element_list, ',', require=False)
+        if comma_symbol is None:
+            break
+        var_dec_element.append(comma_symbol)
+        var_dec_element.append(
+            compile_type(token_element_list, require=True)
+        )
+        var_dec_element.append(
+            compile_identifier(token_element_list, require=True)
+        )
+
+    var_dec_element.append(
+        compile_symbol(token_element_list, ';', require=True)
+    )
+
+    return var_dec_element
 
 
-def compile_keyword(token_element_list: List[Element], keyword_limit: Union[str, List[str]], require=True):
-    keyword_token = token_element_list[-1]
+def compile_statements(token_element_list: List[Element], require=True):
+    statements_element = Element('statements')
 
-    if keyword_token.tag != 'keyword':
-        if require:
-            raise Exception('keyword require')
-        else:
-            return None
+    while True:
+        statement_keyword = token_element_list[-1]
+        if statement_keyword.tag != 'keyword':
+            raise Exception('statement keyword require')
 
-    if keyword_token.text not in keyword_limit:
-        if require:
-            raise Exception('keyword text not match')
-        else:
-            return None
-
-    return token_element_list.pop()
-
-
-def compile_symbol(token_element_list: List[Element], symbol_limit: Union[str, List[str]], require=True):
-    symbol_token = token_element_list[-1]
-
-    if symbol_token.tag != 'symbol':
-        if require:
-            raise Exception('symbol require')
-        else:
-            return None
-
-    if symbol_token.text not in symbol_limit:
-        if require:
-            raise Exception('symbol text not match')
-        else:
-            return None
-
-    return token_element_list.pop()
+    return statements_element
