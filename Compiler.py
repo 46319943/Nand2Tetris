@@ -1,7 +1,7 @@
 import sys
 import os
 import glob
-from syntax_analyzer import tokenize
+from syntax_analyzer import tokenize, parse
 
 if __name__ == '__main__':
     input_path = sys.argv[1]
@@ -25,6 +25,10 @@ if __name__ == '__main__':
                 file_path.replace('.jack', 'TT.xml')
             )
 
+            parse(ele_tree).write(
+                file_path.replace('.jack', 'TTT.xml')
+            )
+
     else:
         file_path = input_path
 
@@ -38,3 +42,7 @@ if __name__ == '__main__':
         ele_tree = tokenize(lines)
 
         ele_tree.write(file_path.replace('.jack', 'TT.xml'))
+
+        parse(ele_tree).write(
+            file_path.replace('.jack', 'TTT.xml')
+        )
