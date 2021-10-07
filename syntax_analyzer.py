@@ -74,14 +74,16 @@ def tokenize(lines: str):
 
             # symbol process
             if token in symbol_list:
-
                 # XML输出特殊符号替换
-                if token == '<':
-                    token = '&lt;'
-                if token == '>':
-                    token = '&gt;'
-                if token == '&':
-                    token = '&amp;'
+                # 不需要，模块自动转译。
+                # 这里弄了之后，相反无法识别符号了
+
+                # if token == '<':
+                #     token = '&lt;'
+                # if token == '>':
+                #     token = '&gt;'
+                # if token == '&':
+                #     token = '&amp;'
 
                 SubElement(root, 'symbol').text = token
                 continue
@@ -172,12 +174,12 @@ def compile_identifier(token_element_list: List[Element], require=True):
 def compile_type(token_element_list: List[Element], require=True):
     type_keyword_or_identifier = token_element_list[-1]
 
-    if type_keyword_or_identifier.tag == 'keyword' and (
-            type_keyword_or_identifier.text not in ['int', 'char', 'boolean']):
-        if require:
-            raise Exception('type keyword text not match')
-        else:
-            return None
+    if type_keyword_or_identifier.tag == 'keyword':
+        if type_keyword_or_identifier.text not in ['int', 'char', 'boolean']:
+            if require:
+                raise Exception('type keyword text not match')
+            else:
+                return None
     elif type_keyword_or_identifier.tag != 'identifier':
         if require:
             raise Exception('type identifier tag not match')
@@ -270,9 +272,9 @@ def compile_subroutine_dec(token_element_list: List[Element]):
     class_subroutine_dec_element.append(constructor_or_function_or_method_keyword)
 
     void_or_type_keyword_or_identifier = token_element_list.pop()
-    if void_or_type_keyword_or_identifier.tag == 'keyword' and (
-            void_or_type_keyword_or_identifier.text not in ['void', 'int', 'char', 'boolean']):
-        raise Exception('void or type text not match')
+    if void_or_type_keyword_or_identifier.tag == 'keyword':
+        if void_or_type_keyword_or_identifier.text not in ['void', 'int', 'char', 'boolean']:
+            raise Exception('void or type text not match')
     elif void_or_type_keyword_or_identifier.tag != 'identifier':
         raise Exception('type tag not match identifier')
     class_subroutine_dec_element.append(void_or_type_keyword_or_identifier)
@@ -285,9 +287,9 @@ def compile_subroutine_dec(token_element_list: List[Element]):
         compile_symbol(token_element_list, '(', require=True)
     )
 
-    parameter_list_element = compile_parameter_list(token_element_list)
-    if parameter_list_element is not None:
-        class_subroutine_dec_element.append(parameter_list_element)
+    class_subroutine_dec_element.append(
+        compile_parameter_list(token_element_list)
+    )
 
     class_subroutine_dec_element.append(
         compile_symbol(token_element_list, ')', require=True)
@@ -304,33 +306,27 @@ def compile_parameter_list(token_element_list: List[Element]):
     parameter_list_element = Element('parameterList')
 
     type_element = compile_type(token_element_list, require=False)
-    if type_element is None:
-        return None
-    parameter_list_element.append(type_element)
+    if type_element is not None:
+        parameter_list_element.append(type_element)
 
-    # var_name_identifier = token_element_list.pop()
-    # if var_name_identifier.tag != 'identifier':
-    #     raise Exception('var name tag not match identifier')
-    # parameter_list_element.append(var_name_identifier)
+        parameter_list_element.append(
+            compile_identifier(token_element_list, require=True)
+        )
 
-    parameter_list_element.append(
-        compile_identifier(token_element_list, require=True)
-    )
-
-    while True:
-        if token_element_list[-1].tag == 'symbol' and token_element_list[-1].text == ',':
-            parameter_list_element.append(
-                token_element_list.pop()
-            )
-            parameter_list_element.append(
-                compile_type(token_element_list, require=True)
-            )
-            parameter_list_element.append(
-                compile_identifier(token_element_list, require=True)
-            )
-            continue
-        else:
-            break
+        while True:
+            if token_element_list[-1].tag == 'symbol' and token_element_list[-1].text == ',':
+                parameter_list_element.append(
+                    token_element_list.pop()
+                )
+                parameter_list_element.append(
+                    compile_type(token_element_list, require=True)
+                )
+                parameter_list_element.append(
+                    compile_identifier(token_element_list, require=True)
+                )
+                continue
+            else:
+                break
 
     return parameter_list_element
 
@@ -342,8 +338,14 @@ def compile_subroutine_body(token_element_list: List[Element]):
         compile_symbol(token_element_list, '{', require=True)
     )
 
+    while True:
+        var_dec_element = compile_var_dec(token_element_list, require=False)
+        if var_dec_element is None:
+            break
+        subroutine_body_element.append(var_dec_element)
+
     subroutine_body_element.append(
-        compile_statements(token_element_list, require=True)
+        compile_statements(token_element_list)
     )
 
     subroutine_body_element.append(
@@ -364,7 +366,7 @@ def compile_var_dec(token_element_list: List[Element], require=True):
             return None
 
     var_dec_element.append(
-        var_dec_element
+        var_keyword
     )
 
     var_dec_element.append(
@@ -381,9 +383,6 @@ def compile_var_dec(token_element_list: List[Element], require=True):
             break
         var_dec_element.append(comma_symbol)
         var_dec_element.append(
-            compile_type(token_element_list, require=True)
-        )
-        var_dec_element.append(
             compile_identifier(token_element_list, require=True)
         )
 
@@ -394,18 +393,39 @@ def compile_var_dec(token_element_list: List[Element], require=True):
     return var_dec_element
 
 
-def compile_statements(token_element_list: List[Element], require=True):
+def compile_statements(token_element_list: List[Element]):
     statements_element = Element('statements')
 
     while True:
         statement_keyword = token_element_list[-1]
-        if statement_keyword.tag != 'keyword' and statement_keyword.text not in ['let', 'if', 'while', 'do', 'return']:
-            return None
+        if statement_keyword.tag != 'keyword' or statement_keyword.text not in ['let', 'if', 'while', 'do', 'return']:
+            break
+
+        if statement_keyword.text == 'let':
+            statements_element.append(
+                compile_let_statement(token_element_list)
+            )
+        elif statement_keyword.text == 'if':
+            statements_element.append(
+                compile_if_statement(token_element_list)
+            )
+        elif statement_keyword.text == 'while':
+            statements_element.append(
+                compile_while_statement(token_element_list)
+            )
+        elif statement_keyword.text == 'do':
+            statements_element.append(
+                compile_do_statement(token_element_list)
+            )
+        elif statement_keyword.text == 'return':
+            statements_element.append(
+                compile_return_statement(token_element_list)
+            )
 
     return statements_element
 
 
-def compile_let_statement(token_element_list: List[Element], require=True):
+def compile_let_statement(token_element_list: List[Element]):
     let_statement_element = Element('letStatement')
 
     let_statement_element.append(
@@ -416,17 +436,201 @@ def compile_let_statement(token_element_list: List[Element], require=True):
         compile_identifier(token_element_list, require=True)
     )
 
-    pass
+    left_brackets_symbol = compile_symbol(token_element_list, '[', require=False)
+    if left_brackets_symbol is not None:
+        let_statement_element.append(left_brackets_symbol)
+        let_statement_element.append(
+            compile_expression(token_element_list, require=True)
+        )
+        let_statement_element.append(
+            compile_symbol(token_element_list, ']', require=True)
+        )
+
+    let_statement_element.append(
+        compile_symbol(token_element_list, '=', require=True)
+    )
+
+    let_statement_element.append(
+        compile_expression(token_element_list, require=True)
+    )
+
+    let_statement_element.append(
+        compile_symbol(token_element_list, ';', require=True)
+    )
+
+    return let_statement_element
+
+
+def compile_if_statement(token_element_list: List[Element]):
+    if_statement_element = Element('ifStatement')
+
+    if_statement_element.append(
+        compile_keyword(token_element_list, 'if', require=True)
+    )
+
+    if_statement_element.append(
+        compile_symbol(token_element_list, '(', require=True)
+    )
+
+    if_statement_element.append(
+        compile_expression(token_element_list, require=True)
+    )
+
+    if_statement_element.append(
+        compile_symbol(token_element_list, ')', require=True)
+    )
+
+    if_statement_element.append(
+        compile_symbol(token_element_list, '{', require=True)
+    )
+
+    if_statement_element.append(
+        compile_statements(token_element_list)
+    )
+
+    if_statement_element.append(
+        compile_symbol(token_element_list, '}', require=True)
+    )
+
+    else_keyword = compile_keyword(token_element_list, 'else', require=False)
+    if else_keyword is not None:
+        if_statement_element.append(else_keyword)
+
+        if_statement_element.append(
+            compile_symbol(token_element_list, '{', require=True)
+        )
+
+        if_statement_element.append(
+            compile_statements(token_element_list)
+        )
+
+        if_statement_element.append(
+            compile_symbol(token_element_list, '}', require=True)
+        )
+
+    return if_statement_element
+
+
+def compile_while_statement(token_element_list: List[Element]):
+    while_statement_element = Element('whileStatement')
+
+    while_statement_element.append(
+        compile_keyword(token_element_list, 'while', require=True)
+    )
+
+    while_statement_element.append(
+        compile_symbol(token_element_list, '(', require=True)
+    )
+
+    while_statement_element.append(
+        compile_expression(token_element_list, require=True)
+    )
+
+    while_statement_element.append(
+        compile_symbol(token_element_list, ')', require=True)
+    )
+
+    while_statement_element.append(
+        compile_symbol(token_element_list, '{', require=True)
+    )
+
+    while_statement_element.append(
+        compile_statements(token_element_list)
+    )
+
+    while_statement_element.append(
+        compile_symbol(token_element_list, '}', require=True)
+    )
+
+    return while_statement_element
+
+
+def compile_do_statement(token_element_list: List[Element]):
+    do_statement_element = Element('doStatement')
+    do_statement_element.append(
+        compile_keyword(token_element_list, 'do', require=True)
+    )
+    do_statement_element.append(
+        compile_identifier(token_element_list, require=True)
+    )
+
+    # LL(2)
+    next_token = token_element_list[-1]
+
+    # varName
+    if next_token.tag != 'symbol':
+        raise Exception('subroutineCall require')
+
+    # subroutineCall
+    elif next_token.text == '(':
+        do_statement_element.append(
+            compile_symbol(token_element_list, '(', require=True)
+        )
+        do_statement_element.append(
+            compile_expression_list(token_element_list)
+        )
+        do_statement_element.append(
+            compile_symbol(token_element_list, ')', require=True)
+        )
+    # class.subroutineCall
+    elif next_token.text == '.':
+        do_statement_element.append(
+            compile_symbol(token_element_list, '.', require=True)
+        )
+        do_statement_element.append(
+            compile_identifier(token_element_list, require=True)
+        )
+        do_statement_element.append(
+            compile_symbol(token_element_list, '(', require=True)
+        )
+        do_statement_element.append(
+            compile_expression_list(token_element_list)
+        )
+        do_statement_element.append(
+            compile_symbol(token_element_list, ')', require=True)
+        )
+    else:
+        raise Exception('subroutineCall symbol text not match')
+
+    do_statement_element.append(
+        compile_symbol(token_element_list, ';', require=True)
+    )
+
+    return do_statement_element
+
+
+def compile_return_statement(token_element_list: List[Element]):
+    return_statement_element = Element('returnStatement')
+    return_statement_element.append(
+        compile_keyword(token_element_list, 'return', require=True)
+    )
+
+    expression_element = compile_expression(token_element_list, require=False)
+    if expression_element is not None:
+        return_statement_element.append(expression_element)
+
+    return_statement_element.append(
+        compile_symbol(token_element_list, ';', require=True)
+    )
+
+    return return_statement_element
 
 
 def compile_expression_list(token_element_list: List[Element]):
     expression_list_element = Element('expressionList')
 
-    while True:
-        expresstion_element = compile_expression(token_element_list, require=False)
-        if expresstion_element is None:
-            break
+    expresstion_element = compile_expression(token_element_list, require=False)
+    if expresstion_element is not None:
         expression_list_element.append(expresstion_element)
+
+        while True:
+            comma_symbol = compile_symbol(token_element_list, ',', require=False)
+            if comma_symbol is None:
+                break
+            expression_list_element.append(comma_symbol)
+            expression_list_element.append(
+                compile_expression(token_element_list, require=True)
+            )
 
     return expression_list_element
 
@@ -455,8 +659,17 @@ def compile_expression(token_element_list: List[Element], require=True):
 
 
 def compile_term(token_element_list: List[Element], require=True):
+    '''
+
+    LL(2) involved
+
+    :param token_element_list:
+    :param require:
+    :return:
+    '''
+
     term_element = Element('term')
-    term_token = token_element_list[-1]
+    term_token = token_element_list.pop()
     term_element.append(term_token)
 
     if term_token.tag in ['integerConstant', 'stringConstant']:
@@ -464,6 +677,7 @@ def compile_term(token_element_list: List[Element], require=True):
 
     elif term_token.tag == 'keyword':
         if term_token.text not in ['true', 'false', 'null', 'this']:
+            token_element_list.append(term_token)
             if require:
                 raise Exception('keyword constant text not match')
             else:
@@ -472,10 +686,11 @@ def compile_term(token_element_list: List[Element], require=True):
     elif term_token.tag == 'identifier':
 
         # LL(2)
-        next_token = token_element_list[-2]
+        # 如果使用-2索引，但是pop取出来还是-1。所以前面的term_token还是得pop出来。不匹配再push回去
+        next_token = token_element_list[-1]
 
         # varName
-        if next_token.tag != 'keyword':
+        if next_token.tag != 'symbol':
             pass
 
         # varName[expression]
@@ -495,7 +710,7 @@ def compile_term(token_element_list: List[Element], require=True):
                 compile_symbol(token_element_list, '(', require=True)
             )
             term_element.append(
-                compile_expression_list(token_element_list, require=True)
+                compile_expression_list(token_element_list)
             )
             term_element.append(
                 compile_symbol(token_element_list, ')', require=True)
@@ -512,7 +727,7 @@ def compile_term(token_element_list: List[Element], require=True):
                 compile_symbol(token_element_list, '(', require=True)
             )
             term_element.append(
-                compile_expression_list(token_element_list, require=True)
+                compile_expression_list(token_element_list)
             )
             term_element.append(
                 compile_symbol(token_element_list, ')', require=True)
@@ -529,18 +744,33 @@ def compile_term(token_element_list: List[Element], require=True):
             term_element.append(
                 compile_symbol(token_element_list, ')', require=True)
             )
+        # unaryOp + term
         elif term_token.text in ['-', '~']:
-            pass
+            term_element.append(
+                compile_term(token_element_list, require=True)
+            )
         else:
+            token_element_list.append(term_token)
             if require:
                 raise Exception('term symbol text not match')
             else:
                 return None
     else:
+        token_element_list.append(term_token)
         if require:
             raise Exception('unsupported term')
         else:
             return None
 
-    token_element_list.pop()
     return term_element
+
+
+def print_element(element):
+    print(
+        ', '.join(
+            [
+                f'({ele.tag}, {ele.text})'
+                for ele in list(element)
+            ]
+        )
+    )
