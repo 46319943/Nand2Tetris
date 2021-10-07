@@ -20,6 +20,7 @@ if __name__ == '__main__':
             lines = f.readlines()
             f.close()
 
+            # TODO: newline required
             ele_tree = tokenize(lines)
             ele_tree.write(
                 file_path.replace('.jack', 'TT.xml')
