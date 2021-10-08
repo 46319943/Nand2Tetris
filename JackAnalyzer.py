@@ -1,6 +1,9 @@
-import sys
-import os
 import glob
+import os
+import re
+import sys
+from xml.etree import ElementTree
+
 from syntax_analyzer import tokenize, parse
 
 if __name__ == '__main__':
@@ -22,13 +25,37 @@ if __name__ == '__main__':
 
             # TODO: newline required
             ele_tree = tokenize(lines)
+
             ele_tree.write(
-                file_path.replace('.jack', 'TT.xml')
+                file_path.replace('.jack', 'Token.xml'),
+                short_empty_elements=False
             )
 
             parse(ele_tree).write(
-                file_path.replace('.jack', 'TTT.xml')
+                file_path.replace('.jack', 'Complete.xml'),
+                short_empty_elements=False
             )
+
+            # 正则添加换行
+            with open(file_path.replace('.jack', '.xml'), "w") as f:
+                f.write(
+                    re.sub(
+                        r'><',
+                        '>\n<',
+                        ElementTree.tostring(
+                            parse(ele_tree).getroot(),
+                            encoding='unicode',
+                            short_empty_elements=False
+                        )
+                    )
+                )
+
+            # TODO: do not close empty element
+            # xmlstr = minidom.parseString(
+            #     ET.tostring(parse(ele_tree).getroot(), short_empty_elements=False)
+            # ).childNodes[0].toprettyxml(indent="   ")
+            # with open(file_path.replace('.jack', 'TTTT.xml'), "w") as f:
+            #     f.write(xmlstr)
 
     else:
         file_path = input_path
@@ -42,8 +69,26 @@ if __name__ == '__main__':
 
         ele_tree = tokenize(lines)
 
-        ele_tree.write(file_path.replace('.jack', 'TT.xml'))
+        ele_tree.write(
+            file_path.replace('.jack', 'Token.xml'),
+            short_empty_elements=False
+        )
 
         parse(ele_tree).write(
-            file_path.replace('.jack', 'TTT.xml')
+            file_path.replace('.jack', 'Complete.xml'),
+            short_empty_elements=False
         )
+
+        # 正则添加换行
+        with open(file_path.replace('.jack', '.xml'), "w") as f:
+            f.write(
+                re.sub(
+                    r'><',
+                    '>\n<',
+                    ElementTree.tostring(
+                        parse(ele_tree).getroot(),
+                        encoding='unicode',
+                        short_empty_elements=False
+                    )
+                )
+            )
