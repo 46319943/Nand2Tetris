@@ -25,7 +25,7 @@ symbol_list = [
 # symbol_re = r'(\{|\}|\(|\)|\[|\]|\.|,|;|\+|-|\*|/|&|\||<|>|=|~)'
 
 
-def tokenize(lines: str):
+def tokenize(lines: List[str]):
     # 处理多行注释. 用空白替换/* */
 
     # 每一行本身就是\n结尾
