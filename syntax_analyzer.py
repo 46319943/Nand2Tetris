@@ -37,6 +37,7 @@ require必为False类型：所有出现的情况都是可选的
 '''
 
 vm_code_list = []
+class_name = None
 
 
 def tokenize(lines: List[str]):
@@ -175,22 +176,38 @@ def compile_symbol(token_element_list: List[Element], symbol_limit: Union[str, L
 
 def compile_identifier(
         token_element_list: List[Element],
-        declare: bool = False,
         type: str = None,
         kind: str = None,
         is_variable: bool = None,
 ):
+    '''
+    声明必须要提供type数据类型和kind变量作用域
+    所以提供了type和kind就是声明，不需要额外说明声明
+
+    className和subroutineName不需要记录入symbolTable
+    但是返回的时候需要返回kind
+
+    :param token_element_list:
+    :param declare:
+    :param type:
+    :param kind:
+    :param is_variable: 限制identifier必须为变量，或者必须为className/subroutine
+    :return:
+    '''
+
     identifier_token = token_element_list[-1]
 
     if identifier_token.tag != 'identifier':
         raise Exception('identifier require')
 
     identifier_element = token_element_list.pop()
-    identifier_element.set('declare', str(declare))
+
+    name = identifier_element.text
 
     # variable declare
-    name = identifier_element.text
-    if declare:
+    if type is not None and kind is not None:
+        identifier_element.set('declare', 'true')
+        # class variable
         if kind in ['field', 'static']:
             if name in class_symbol_table:
                 raise Exception('class symbol table duplicate')
@@ -199,6 +216,7 @@ def compile_identifier(
                 'kind': kind,
                 '#': len(class_symbol_table)
             }
+        # subroutine variable
         elif kind in ['argument', 'local']:
             if name in subroutine_symbol_table:
                 raise Exception('subroutine symbol table duplicate')
@@ -209,18 +227,23 @@ def compile_identifier(
             }
         else:
             raise Exception('invalid variable kind')
-    # variable retrieve
+
+    # variable or className/subroutineName retrieve
     else:
         if name in subroutine_symbol_table:
             type = subroutine_symbol_table[name]['type']
             kind = subroutine_symbol_table[name]['kind']
+            index = subroutine_symbol_table[name]['#']
         elif name in class_symbol_table:
             type = class_symbol_table[name]['type']
             kind = class_symbol_table[name]['kind']
+            index = class_symbol_table[name]['#']
         else:
             type = None
             kind = 'class or subroutine name'
+            index = None
 
+    # variable constrain
     if is_variable is not None:
         if is_variable and type is None:
             raise Exception('variable expected')
@@ -229,6 +252,8 @@ def compile_identifier(
 
     identifier_element.set('type', str(type))
     identifier_element.set('kind', str(kind))
+    identifier_element.set('#', str(index))
+
     return identifier_element
 
 
@@ -255,18 +280,24 @@ def compile_type(token_element_list: List[Element], require=True, allow_void=Fal
 
 
 def compile_class(token_element_list: List[Element]):
+    # 清除class symbol table
     class_symbol_table.clear()
 
     class_element = Element('class')
 
+    # class关键字
     class_keyword = compile_keyword(token_element_list, 'class', require=False)
 
     if class_keyword is None:
         return None
     class_element.append(class_keyword)
 
+    # class name
+    class_name_element = compile_identifier(token_element_list)
+    global class_name
+    class_name = class_name_element.text
     class_element.append(
-        compile_identifier(token_element_list, declare=False)
+        class_name_element
     )
 
     class_element.append(
@@ -305,10 +336,10 @@ def compile_class_var_dec(token_element_list: List[Element]):
         type_element
     )
 
+    # class variable declare
     class_var_dec_element.append(
         compile_identifier(
             token_element_list,
-            declare=True,
             type=type_element.text,
             kind=static_or_field_keyword.text
         )
@@ -320,12 +351,12 @@ def compile_class_var_dec(token_element_list: List[Element]):
         )
         if comma_symbol is None:
             break
-
         class_var_dec_element.append(comma_symbol)
+
+        # class variable declare
         class_var_dec_element.append(
             compile_identifier(
                 token_element_list,
-                declare=True,
                 type=type_element.text,
                 kind=static_or_field_keyword.text
             )
@@ -357,7 +388,7 @@ def compile_subroutine_dec(token_element_list: List[Element]):
 
     # subroutineName
     class_subroutine_dec_element.append(
-        compile_identifier(token_element_list, declare=False, is_variable=False)
+        compile_identifier(token_element_list, is_variable=False)
     )
 
     class_subroutine_dec_element.append(
@@ -385,10 +416,11 @@ def compile_parameter_list(token_element_list: List[Element]):
     type_element = compile_type(token_element_list, require=False)
     if type_element is not None:
         parameter_list_element.append(type_element)
+
+        # parameter/argument variable
         parameter_list_element.append(
             compile_identifier(
                 token_element_list,
-                declare=True,
                 type=type_element.text,
                 kind='argument'
             )
@@ -402,10 +434,10 @@ def compile_parameter_list(token_element_list: List[Element]):
                 type_element = compile_type(token_element_list, require=True)
                 parameter_list_element.append(type_element)
 
+                # parameter/argument variable
                 parameter_list_element.append(
                     compile_identifier(
                         token_element_list,
-                        declare=True,
                         type=type_element.text,
                         kind='argument'
                     )
@@ -453,10 +485,10 @@ def compile_var_dec(token_element_list: List[Element]):
     type_element = compile_type(token_element_list, require=True)
     var_dec_element.append(type_element)
 
+    # local variable declare
     var_dec_element.append(
         compile_identifier(
             token_element_list,
-            declare=True,
             type=type_element.text,
             kind='local'
         )
@@ -467,10 +499,11 @@ def compile_var_dec(token_element_list: List[Element]):
         if comma_symbol is None:
             break
         var_dec_element.append(comma_symbol)
+
+        # local variable declare
         var_dec_element.append(
             compile_identifier(
                 token_element_list,
-                declare=True,
                 type=type_element.text,
                 kind='local'
             )
@@ -522,8 +555,9 @@ def compile_let_statement(token_element_list: List[Element]):
         compile_keyword(token_element_list, 'let', require=True)
     )
 
+    # variable retrieve
     let_statement_element.append(
-        compile_identifier(token_element_list, declare=False, is_variable=True)
+        compile_identifier(token_element_list, is_variable=True)
     )
 
     left_brackets_symbol = compile_symbol(token_element_list, '[', require=False)
@@ -640,19 +674,21 @@ def compile_do_statement(token_element_list: List[Element]):
     do_statement_element.append(
         compile_keyword(token_element_list, 'do', require=True)
     )
-    do_statement_element.append(
-        compile_identifier(token_element_list, declare=False)
-    )
 
-    # LL(2)
-    next_token = token_element_list[-1]
+    LL1_element = token_element_list[-1]
+    LL2_element = token_element_list[-2]
 
-    # varName
-    if next_token.tag != 'symbol':
-        raise Exception('subroutineCall require')
+    if LL1_element.tag != 'identifier':
+        raise Exception('LL1 identifier expected')
 
-    # subroutineCall
-    elif next_token.text == '(':
+    if LL2_element.tag != 'symbol':
+        raise Exception('LL2 symbol expected')
+
+    # subroutineName()
+    if LL2_element.text == '(':
+        subroutine_name_element = compile_identifier(token_element_list, is_variable=False)
+        do_statement_element.append(subroutine_name_element)
+
         do_statement_element.append(
             compile_symbol(token_element_list, '(', require=True)
         )
@@ -662,15 +698,20 @@ def compile_do_statement(token_element_list: List[Element]):
         do_statement_element.append(
             compile_symbol(token_element_list, ')', require=True)
         )
-    # class.subroutineCall
-    elif next_token.text == '.':
+
+    # className/varName.subroutineName()
+    elif LL2_element.text == '.':
+        class_or_variable_name_element = compile_identifier(token_element_list)
+        do_statement_element.append(class_or_variable_name_element)
+
         do_statement_element.append(
             compile_symbol(token_element_list, '.', require=True)
         )
+
         # subroutineName
-        do_statement_element.append(
-            compile_identifier(token_element_list, declare=False, is_variable=False)
-        )
+        subroutine_name_element = compile_identifier(token_element_list, is_variable=False)
+        do_statement_element.append(subroutine_name_element)
+
         do_statement_element.append(
             compile_symbol(token_element_list, '(', require=True)
         )
@@ -680,8 +721,9 @@ def compile_do_statement(token_element_list: List[Element]):
         do_statement_element.append(
             compile_symbol(token_element_list, ')', require=True)
         )
+
     else:
-        raise Exception('subroutineCall symbol text not match')
+        raise Exception('invalid symbol text')
 
     do_statement_element.append(
         compile_symbol(token_element_list, ';', require=True)
@@ -746,6 +788,26 @@ def compile_expression(token_element_list: List[Element], require=True):
             compile_term(token_element_list, require=True)
         )
 
+        op = op_element.text
+        if op == '+':
+            vm_code_list.append('add')
+        elif op == '-':
+            vm_code_list.append('sub')
+        elif op == '*':
+            vm_code_list.append('call Math.multiply')
+        elif op == '/':
+            vm_code_list.append('call Math.divide')
+        elif op == '&':
+            vm_code_list.append('and')
+        elif op == '|':
+            vm_code_list.append('or')
+        elif op == '<':
+            vm_code_list.append('lt')
+        elif op == '>':
+            vm_code_list.append('gt')
+        elif op == '=':
+            vm_code_list.append('eq')
+
     return expression_element
 
 
@@ -760,44 +822,69 @@ def compile_term(token_element_list: List[Element], require=True):
     '''
 
     term_element = Element('term')
-    term_token = token_element_list[-1]
+    LL1_element = token_element_list[-1]
+    LL2_element = token_element_list[-2]
 
-    if term_token.tag == 'inregerConstant':
+    # integerConstant
+    '''
+    if exp is a number n:
+        output 'push n'
+    '''
+    if LL1_element.tag == 'inregerConstant':
         term_element.append(token_element_list.pop())
 
         vm_code_list.append(
-            'push ' + term_token.text
+            'push ' + LL1_element.text
         )
 
-    if term_token.tag == 'stringConstant':
+    # stringConstant
+
+    # String constants are created using the OS constructor String.new(length)
+    # String assignments like x="cc...c" are handled using a series of calls to String.appendChar(c)
+
+    if LL1_element.tag == 'stringConstant':
         term_element.append(token_element_list.pop())
 
         # TODO: create string object
         # vm_code_list.append()
 
+    # keywordConstant
 
-    elif term_token.tag == 'keyword':
+    # null and false are mapped to the constant 0.
+    # True is mapped to the constant -1 (this constant can be obtained via push constant 1 followed by neg).
+
+    elif LL1_element.tag == 'keyword':
         keyword_element = compile_keyword(token_element_list, ['true', 'false', 'null', 'this'], require=False)
-        if keyword_element is not None:
-            term_element.append(keyword_element)
-        else:
+        if keyword_element is None:
             if require:
                 raise Exception('keyword constant text not match')
             else:
                 return None
 
-    elif term_token.tag == 'identifier':
+        term_element.append(keyword_element)
 
-        # TODO: 变量判断
+        if keyword_element.text == 'true':
+            vm_code_list.extend([
+                'push constant 1',
+                'neg'
+            ])
+        elif keyword_element.text in ['false', 'null']:
+            vm_code_list.append('push constant 0')
+        elif keyword_element.text == 'this':
+            vm_code_list.append('push pointer 0')
 
-        # LL(2)
-        # 如果使用-2索引，但是pop取出来还是-1。所以前面的term_token还是得pop出来。不匹配再push回去
-        # next_token = token_element_list[-1]
-        next_token = token_element_list[-2]
+
+    elif LL1_element.tag == 'identifier':
+
+        # 变量判断
 
         # varName
-        if next_token.tag != 'symbol':
-            variable_element = compile_identifier(token_element_list, declare=False, is_variable=True)
+
+        # if exp is a variable var:
+        #     output “push var”
+
+        if LL2_element.tag != 'symbol' or LL2_element.text not in ['[', '(', '.']:
+            variable_element = compile_identifier(token_element_list, is_variable=True)
             term_element.append(variable_element)
 
             vm_code_list.append(
@@ -805,8 +892,11 @@ def compile_term(token_element_list: List[Element], require=True):
             )
 
         # varName[expression]
-        elif next_token.tag == 'symbol' and next_token.text == '[':
-            variable_element = compile_identifier(token_element_list, declare=False, is_variable=True)
+
+        # TODO: array process
+
+        elif LL2_element.tag == 'symbol' and LL2_element.text == '[':
+            variable_element = compile_identifier(token_element_list, is_variable=True)
             term_element.append(variable_element)
 
             term_element.append(
@@ -818,60 +908,105 @@ def compile_term(token_element_list: List[Element], require=True):
             term_element.append(
                 compile_symbol(token_element_list, ']', require=True)
             )
+
         # subroutineCall
-        elif next_token.tag == 'symbol' and next_token.text == '(':
-            subroutine_element = compile_identifier(token_element_list, declare=False, is_variable=False)
-            term_element.append(subroutine_element)
+
+        # subroutineName(expressionList) -> in class method call
+        elif LL2_element.tag == 'symbol' and LL2_element.text == '(':
+            subroutine_name_element = compile_identifier(token_element_list, is_variable=False)
+            term_element.append(subroutine_name_element)
+
+            # push this to argument 0
+            vm_code_list.append('push pointer 0')
 
             term_element.append(
                 compile_symbol(token_element_list, '(', require=True)
             )
-            term_element.append(
-                compile_expression_list(token_element_list)
-            )
+
+            expression_list_element = compile_expression_list(token_element_list)
+            term_element.append(expression_list_element)
+
             term_element.append(
                 compile_symbol(token_element_list, ')', require=True)
             )
 
-        # (class/varName).subroutineCall
-        elif next_token.tag == 'symbol' and next_token.text == '.':
+            vm_code_list.append('call ' + class_name + '.' + subroutine_name_element.text
+                                + ' ' + len(expression_list_element)
+                                )
+
+        # (class/varName).subroutineName(expressionList)
+        elif LL2_element.tag == 'symbol' and LL2_element.text == '.':
+            class_or_variable_name_element = compile_identifier(token_element_list, is_variable=False)
+            term_element.append(class_or_variable_name_element)
+
+            type = class_or_variable_name_element.get('type')
+            kind = class_or_variable_name_element.get('kind')
+            index = class_or_variable_name_element.get('#')
+
+            # variable.subroutineName(expressionList) -> out class method call
+            # push variable to argument 0
+            if kind in ['static', 'field', 'argument', 'local']:
+                if kind == 'local':
+                    vm_code_list.append('push local ' + index)
+                elif kind == 'argument':
+                    vm_code_list.append('push argument ' + index)
+                elif kind == 'field':
+                    vm_code_list.append('push this ' + index)
+                elif kind == 'static':
+                    vm_code_list.append('push static ' + index)
+                callee_class_name = type
+            else:
+                callee_class_name = class_or_variable_name_element.text
+
             term_element.append(
                 compile_symbol(token_element_list, '.', require=True)
             )
-            term_element.append(
-                compile_identifier(token_element_list, declare=False)
-            )
+
+            subroutine_name_element = compile_identifier(token_element_list, is_variable=False)
+            term_element.append(subroutine_name_element)
+
             term_element.append(
                 compile_symbol(token_element_list, '(', require=True)
             )
-            term_element.append(
-                compile_expression_list(token_element_list)
-            )
+
+            expression_list_element = compile_expression_list(token_element_list)
+            term_element.append(expression_list_element)
+
             term_element.append(
                 compile_symbol(token_element_list, ')', require=True)
             )
 
-    elif term_token.tag == 'symbol':
-        symbol_element = compile_symbol(token_element_list, ['(', '-', '~'], require=False)
-        if symbol_element is not None:
-            term_element.append(symbol_element)
-            if term_token.text == '(':
-                term_element.append(
-                    compile_expression(token_element_list, require=True)
-                )
-                term_element.append(
-                    compile_symbol(token_element_list, ')', require=True)
-                )
-            # unaryOp + term
-            elif term_token.text in ['-', '~']:
-                term_element.append(
-                    compile_term(token_element_list, require=True)
-                )
-        else:
-            if require:
-                raise Exception('term symbol text not match')
-            else:
-                return None
+            vm_code_list.append('call ' + callee_class_name + '.' + subroutine_name_element.text
+                                + ' ' + len(expression_list_element)
+                                )
+
+    # (expression)
+    elif LL1_element.tag == 'symbol' and LL1_element.text == '(':
+        term_element.append(
+            compile_symbol(token_element_list, '(', require=True)
+        )
+        term_element.append(
+            compile_expression(token_element_list, require=True)
+        )
+        term_element.append(
+            compile_symbol(token_element_list, ')', require=True)
+        )
+
+    # unaryOp term
+    elif LL1_element.tag == 'symbol' and LL1_element.text in ['-', '~']:
+        symbol_element = compile_symbol(token_element_list, ['-', '~'], require=True)
+        term_element.append(symbol_element)
+
+        term_element.append(
+            compile_term(token_element_list, require=True)
+        )
+
+        if symbol_element.text == '-':
+            vm_code_list.append('neg')
+        elif symbol_element.text == '~':
+            vm_code_list.append('not')
+
+    # not match
     else:
         if require:
             raise Exception('unsupported term')
