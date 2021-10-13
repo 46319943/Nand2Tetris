@@ -36,6 +36,8 @@ require必为True类型：出现了就是必须的
 require必为False类型：所有出现的情况都是可选的
 '''
 
+vm_code_list = []
+
 
 def tokenize(lines: List[str]):
     # 处理多行注释. 用空白替换/* */
@@ -760,8 +762,18 @@ def compile_term(token_element_list: List[Element], require=True):
     term_element = Element('term')
     term_token = token_element_list[-1]
 
-    if term_token.tag in ['integerConstant', 'stringConstant']:
+    if term_token.tag == 'inregerConstant':
         term_element.append(token_element_list.pop())
+
+        vm_code_list.append(
+            'push ' + term_token.text
+        )
+
+    if term_token.tag == 'stringConstant':
+        term_element.append(token_element_list.pop())
+
+        # TODO: create string object
+        # vm_code_list.append()
 
 
     elif term_token.tag == 'keyword':
@@ -784,56 +796,60 @@ def compile_term(token_element_list: List[Element], require=True):
         next_token = token_element_list[-2]
 
         # varName
-        if next_token.tag != 'symbol' or next_token.text not in ['(', '.']:
-            term_element.append(
-                compile_identifier(token_element_list, declare=False, is_variable=True)
+        if next_token.tag != 'symbol':
+            variable_element = compile_identifier(token_element_list, declare=False, is_variable=True)
+            term_element.append(variable_element)
+
+            vm_code_list.append(
+                'push ' + variable_element.get('kind') + ' ' + variable_element.get('#')
             )
 
-            # varName[expression]
-            if next_token.text == '[':
-                term_element.append(
-                    compile_symbol(token_element_list, '[', require=True)
-                )
-                term_element.append(
-                    compile_expression(token_element_list, require=True)
-                )
-                term_element.append(
-                    compile_symbol(token_element_list, ']', require=True)
-                )
+        # varName[expression]
+        elif next_token.tag == 'symbol' and next_token.text == '[':
+            variable_element = compile_identifier(token_element_list, declare=False, is_variable=True)
+            term_element.append(variable_element)
 
-        else:
+            term_element.append(
+                compile_symbol(token_element_list, '[', require=True)
+            )
+            term_element.append(
+                compile_expression(token_element_list, require=True)
+            )
+            term_element.append(
+                compile_symbol(token_element_list, ']', require=True)
+            )
+        # subroutineCall
+        elif next_token.tag == 'symbol' and next_token.text == '(':
+            subroutine_element = compile_identifier(token_element_list, declare=False, is_variable=False)
+            term_element.append(subroutine_element)
+
+            term_element.append(
+                compile_symbol(token_element_list, '(', require=True)
+            )
+            term_element.append(
+                compile_expression_list(token_element_list)
+            )
+            term_element.append(
+                compile_symbol(token_element_list, ')', require=True)
+            )
+
+        # (class/varName).subroutineCall
+        elif next_token.tag == 'symbol' and next_token.text == '.':
+            term_element.append(
+                compile_symbol(token_element_list, '.', require=True)
+            )
             term_element.append(
                 compile_identifier(token_element_list, declare=False)
             )
-
-            # subroutineCall
-            if next_token.text == '(':
-                term_element.append(
-                    compile_symbol(token_element_list, '(', require=True)
-                )
-                term_element.append(
-                    compile_expression_list(token_element_list)
-                )
-                term_element.append(
-                    compile_symbol(token_element_list, ')', require=True)
-                )
-            # (class/varName).subroutineCall
-            elif next_token.text == '.':
-                term_element.append(
-                    compile_symbol(token_element_list, '.', require=True)
-                )
-                term_element.append(
-                    compile_identifier(token_element_list, declare=False)
-                )
-                term_element.append(
-                    compile_symbol(token_element_list, '(', require=True)
-                )
-                term_element.append(
-                    compile_expression_list(token_element_list)
-                )
-                term_element.append(
-                    compile_symbol(token_element_list, ')', require=True)
-                )
+            term_element.append(
+                compile_symbol(token_element_list, '(', require=True)
+            )
+            term_element.append(
+                compile_expression_list(token_element_list)
+            )
+            term_element.append(
+                compile_symbol(token_element_list, ')', require=True)
+            )
 
     elif term_token.tag == 'symbol':
         symbol_element = compile_symbol(token_element_list, ['(', '-', '~'], require=False)
