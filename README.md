@@ -24,3 +24,6 @@ Using Nand gate (and DFF) to build a computer
 //	Double slashes
 ;	Semicolon
 ```
+
+# Jack
+- The lack of real typing, inheritance, and public class fields allows a truly independent compilation of classes. In particular, a Jack class can be compiled without accessing the code of any other class: The fields of other classes are never referred to directly, and all linking to methods of other classes is “late” and done just by name.
