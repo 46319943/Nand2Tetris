@@ -556,9 +556,8 @@ def compile_let_statement(token_element_list: List[Element]):
     )
 
     # variable retrieve
-    let_statement_element.append(
-        compile_identifier(token_element_list, is_variable=True)
-    )
+    variable_element = compile_identifier(token_element_list, is_variable=True)
+    let_statement_element.append(variable_element)
 
     left_brackets_symbol = compile_symbol(token_element_list, '[', require=False)
     if left_brackets_symbol is not None:
@@ -581,6 +580,8 @@ def compile_let_statement(token_element_list: List[Element]):
     let_statement_element.append(
         compile_symbol(token_element_list, ';', require=True)
     )
+
+    pop_variable(variable_element)
 
     return let_statement_element
 
@@ -936,25 +937,14 @@ def compile_term(token_element_list: List[Element], require=True):
 
         # (class/varName).subroutineName(expressionList)
         elif LL2_element.tag == 'symbol' and LL2_element.text == '.':
-            class_or_variable_name_element = compile_identifier(token_element_list, is_variable=False)
+            class_or_variable_name_element = compile_identifier(token_element_list)
             term_element.append(class_or_variable_name_element)
-
-            type = class_or_variable_name_element.get('type')
-            kind = class_or_variable_name_element.get('kind')
-            index = class_or_variable_name_element.get('#')
 
             # variable.subroutineName(expressionList) -> out class method call
             # push variable to argument 0
-            if kind in ['static', 'field', 'argument', 'local']:
-                if kind == 'local':
-                    vm_code_list.append('push local ' + index)
-                elif kind == 'argument':
-                    vm_code_list.append('push argument ' + index)
-                elif kind == 'field':
-                    vm_code_list.append('push this ' + index)
-                elif kind == 'static':
-                    vm_code_list.append('push static ' + index)
-                callee_class_name = type
+            if is_variable(class_or_variable_name_element):
+                callee_class_name, _, _ = push_variable(class_or_variable_name_element)
+            # class.subroutineName(expressionList)
             else:
                 callee_class_name = class_or_variable_name_element.text
 
@@ -1025,3 +1015,46 @@ def print_element(element):
             ]
         )
     )
+
+
+def is_variable(identifier_element: Element):
+    if identifier_element.tag != 'identifier':
+        raise Exception('not identifier')
+    kind = identifier_element.get('kind')
+    return kind in ['static', 'field', 'argument', 'local']
+
+
+def push_variable(variable_element: Element):
+    type = variable_element.get('type')
+    kind = variable_element.get('kind')
+    index = variable_element.get('#')
+
+    if kind in ['static', 'field', 'argument', 'local']:
+        if kind == 'local':
+            vm_code_list.append('push local ' + index)
+        elif kind == 'argument':
+            vm_code_list.append('push argument ' + index)
+        elif kind == 'field':
+            vm_code_list.append('push this ' + index)
+        elif kind == 'static':
+            vm_code_list.append('push static ' + index)
+
+    return type, kind, index
+
+
+def pop_variable(variable_element: Element):
+    type = variable_element.get('type')
+    kind = variable_element.get('kind')
+    index = variable_element.get('#')
+
+    if kind in ['static', 'field', 'argument', 'local']:
+        if kind == 'local':
+            vm_code_list.append('pop local ' + index)
+        elif kind == 'argument':
+            vm_code_list.append('pop argument ' + index)
+        elif kind == 'field':
+            vm_code_list.append('pop this ' + index)
+        elif kind == 'static':
+            vm_code_list.append('pop static ' + index)
+
+    return type, kind, index
