@@ -623,16 +623,23 @@ def compile_let_statement(token_element_list: List[Element]):
     variable_element = compile_identifier(token_element_list, is_variable=True)
     let_statement_element.append(variable_element)
 
+    is_array = False
     # TODO: Array process
     left_brackets_symbol = compile_symbol(token_element_list, '[', require=False)
     if left_brackets_symbol is not None:
         let_statement_element.append(left_brackets_symbol)
+
+        push_variable(variable_element)
+
         let_statement_element.append(
             compile_expression(token_element_list, require=True)
         )
         let_statement_element.append(
             compile_symbol(token_element_list, ']', require=True)
         )
+
+        vm_code_list.append('add')
+        is_array = True
 
     let_statement_element.append(
         compile_symbol(token_element_list, '=', require=True)
@@ -646,7 +653,13 @@ def compile_let_statement(token_element_list: List[Element]):
         compile_symbol(token_element_list, ';', require=True)
     )
 
-    pop_variable(variable_element)
+    if is_array:
+        vm_code_list.append('pop temp 0')
+        vm_code_list.append('pop pointer 1')
+        vm_code_list.append('push temp 0')
+        vm_code_list.append('pop that 0')
+    else:
+        pop_variable(variable_element)
 
     return let_statement_element
 
@@ -1016,6 +1029,7 @@ def compile_term(token_element_list: List[Element], require=True):
         elif LL2_element.tag == 'symbol' and LL2_element.text == '[':
             variable_element = compile_identifier(token_element_list, is_variable=True)
             term_element.append(variable_element)
+            push_variable(variable_element)
 
             term_element.append(
                 compile_symbol(token_element_list, '[', require=True)
