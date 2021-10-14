@@ -125,18 +125,15 @@ def tokenize(lines: List[str]):
                 SubElement(root, 'identifier').text = token
                 continue
 
-    return ElementTree(root)
+    return root
 
 
-def parse(ele_tree: ElementTree):
-    token_root = ele_tree.getroot()
+def parse(token_root: Element):
     # 反转token列表，从而使用pop按顺序获取token
     token_element_list = list(token_root)
     token_element_list.reverse()
 
-    return ElementTree(
-        compile_class(token_element_list)
-    )
+    return compile_class(token_element_list), vm_code_list
 
 
 def compile_keyword(token_element_list: List[Element], keyword_limit: Union[str, List[str]], require=True):
@@ -212,21 +209,23 @@ def compile_identifier(
         if kind in ['field', 'static']:
             if name in class_symbol_table:
                 raise Exception('class symbol table duplicate')
+            index = len(class_symbol_table)
             class_symbol_table[name] = {
                 'name': name,
                 'type': type,
                 'kind': kind,
-                '#': len(class_symbol_table)
+                '#': index
             }
         # subroutine variable
         elif kind in ['argument', 'local']:
             if name in subroutine_symbol_table:
                 raise Exception('subroutine symbol table duplicate')
+            index = len(subroutine_symbol_table)
             subroutine_symbol_table[name] = {
                 'name': name,
                 'type': type,
                 'kind': kind,
-                '#': len(subroutine_symbol_table)
+                '#': index
             }
         else:
             raise Exception('invalid variable kind')
@@ -387,7 +386,7 @@ def compile_subroutine_dec(token_element_list: List[Element]):
 
     function_kind = constructor_or_function_or_method_keyword.text
 
-    # when compile method, add this to argument table
+    # when compile method, add 'this' to argument table
     if function_kind == 'method':
         subroutine_symbol_table['this'] = {
             'name': 'this',
@@ -408,19 +407,20 @@ def compile_subroutine_dec(token_element_list: List[Element]):
         compile_symbol(token_element_list, '(', require=True)
     )
 
-    parameter_list_element = compile_parameter_list(token_element_list)
+    # argument variable declare, add to argument table
+    parameter_list_element, parameter_count = compile_parameter_list(token_element_list)
     class_subroutine_dec_element.append(parameter_list_element)
 
     class_subroutine_dec_element.append(
         compile_symbol(token_element_list, ')', require=True)
     )
 
-    # local variable declare
+    # local variable declare, add to local table
     subroutine_body_element_iter = compile_subroutine_body(token_element_list)
     subroutine_body_element_iter.__next__()
 
     local_variable_list = [
-        local_variable for local_variable in subroutine_symbol_table
+        local_variable for local_variable in subroutine_symbol_table.values()
         if local_variable['kind'] == 'local'
     ]
 
@@ -431,9 +431,12 @@ def compile_subroutine_dec(token_element_list: List[Element]):
             + ' ' + str(len(local_variable_list))
         )
 
-        field_variable = [variable for variable in class_symbol_table.values() if variable['kind'] == 'field']
+        field_variable_list = [
+            field_variable for field_variable in class_symbol_table.values()
+            if field_variable['kind'] == 'field'
+        ]
         vm_code_list.append(
-            'push ' + str(len(field_variable))
+            'push ' + str(len(field_variable_list))
         )
         vm_code_list.append(
             'call Memory.alloc 1'
@@ -469,6 +472,10 @@ def compile_subroutine_dec(token_element_list: List[Element]):
 
 
 def compile_parameter_list(token_element_list: List[Element]):
+    '''
+    对应声明时的参数列表argument list
+    '''
+
     parameter_list_element = Element('parameterList')
     parameter_count = 0
 
@@ -508,8 +515,8 @@ def compile_parameter_list(token_element_list: List[Element]):
             else:
                 break
 
-    parameter_list_element.set('count', parameter_count)
-    return parameter_list_element
+    parameter_list_element.set('count', str(parameter_count))
+    return parameter_list_element, parameter_count
 
 
 def compile_subroutine_body(token_element_list: List[Element]):
@@ -535,7 +542,16 @@ def compile_subroutine_body(token_element_list: List[Element]):
         compile_symbol(token_element_list, '}', require=True)
     )
 
-    return subroutine_body_element
+    yield subroutine_body_element
+
+    # An empty return or return None can be used to end a generator function.
+    # It is equivalent to raising a StopIteration
+
+    # In a generator, the statement
+    # return value
+    # is semantically equivalent to
+    # raise StopIteration(value)
+    return
 
 
 def compile_var_dec(token_element_list: List[Element]):
@@ -624,7 +640,7 @@ def compile_let_statement(token_element_list: List[Element]):
     let_statement_element.append(variable_element)
 
     is_array = False
-    # TODO: Array process
+
     left_brackets_symbol = compile_symbol(token_element_list, '[', require=False)
     if left_brackets_symbol is not None:
         let_statement_element.append(left_brackets_symbol)
@@ -654,6 +670,7 @@ def compile_let_statement(token_element_list: List[Element]):
     )
 
     if is_array:
+        # 最后再让数组指针指向左边数组。
         vm_code_list.append('pop temp 0')
         vm_code_list.append('pop pointer 1')
         vm_code_list.append('push temp 0')
@@ -722,7 +739,7 @@ def compile_if_statement(token_element_list: List[Element]):
             compile_symbol(token_element_list, '}', require=True)
         )
 
-    vm_code_list.append('label IF_TURE_END_' + subroutine_label_index_str)
+    vm_code_list.append('label IF_TRUE_END_' + subroutine_label_index_str)
 
     return if_statement_element
 
@@ -847,7 +864,7 @@ def compile_do_statement(token_element_list: List[Element]):
         )
 
         vm_code_list.append('call ' + callee_class_name + '.' + subroutine_name_element.text
-                            + ' ' + (len(expression_list_element) + this_variable)
+                            + ' ' + str(len(expression_list_element) + this_variable)
                             )
 
     else:
@@ -884,6 +901,10 @@ def compile_return_statement(token_element_list: List[Element]):
 
 
 def compile_expression_list(token_element_list: List[Element]):
+    '''
+    对应调用时的参数列表argument list
+    '''
+
     expression_list_element = Element('expressionList')
 
     expression_element = compile_expression(token_element_list, require=False)
@@ -928,9 +949,9 @@ def compile_expression(token_element_list: List[Element], require=True):
         elif op == '-':
             vm_code_list.append('sub')
         elif op == '*':
-            vm_code_list.append('call Math.multiply')
+            vm_code_list.append('call Math.multiply 2')
         elif op == '/':
-            vm_code_list.append('call Math.divide')
+            vm_code_list.append('call Math.divide 2')
         elif op == '&':
             vm_code_list.append('and')
         elif op == '|':
@@ -964,11 +985,11 @@ def compile_term(token_element_list: List[Element], require=True):
     if exp is a number n:
         output 'push n'
     '''
-    if LL1_element.tag == 'inregerConstant':
+    if LL1_element.tag == 'integerConstant':
         term_element.append(token_element_list.pop())
 
         vm_code_list.append(
-            'push ' + LL1_element.text
+            'push constant ' + LL1_element.text
         )
 
     # stringConstant
@@ -976,7 +997,7 @@ def compile_term(token_element_list: List[Element], require=True):
     # String constants are created using the OS constructor String.new(length)
     # String assignments like x="cc...c" are handled using a series of calls to String.appendChar(c)
 
-    if LL1_element.tag == 'stringConstant':
+    elif LL1_element.tag == 'stringConstant':
         term_element.append(token_element_list.pop())
 
         # TODO: create string object
@@ -1104,7 +1125,7 @@ def compile_term(token_element_list: List[Element], require=True):
             )
 
             vm_code_list.append('call ' + callee_class_name + '.' + subroutine_name_element.text
-                                + ' ' + (len(expression_list_element) + this_variable)
+                                + ' ' + str(len(expression_list_element) + this_variable)
                                 )
 
     # (expression)
