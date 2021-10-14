@@ -1,6 +1,6 @@
 import re
 from typing import List, Union
-from xml.etree.ElementTree import Element, SubElement, ElementTree
+from xml.etree.ElementTree import Element, SubElement
 
 keyword_list = [
     'class', 'constructor', 'function',
@@ -209,7 +209,12 @@ def compile_identifier(
         if kind in ['field', 'static']:
             if name in class_symbol_table:
                 raise Exception('class symbol table duplicate')
-            index = len(class_symbol_table)
+            index = len([
+                class_variable
+                for class_variable in
+                class_symbol_table.values()
+                if class_variable['kind'] == kind
+            ])
             class_symbol_table[name] = {
                 'name': name,
                 'type': type,
@@ -220,7 +225,12 @@ def compile_identifier(
         elif kind in ['argument', 'local']:
             if name in subroutine_symbol_table:
                 raise Exception('subroutine symbol table duplicate')
-            index = len(subroutine_symbol_table)
+            index = len([
+                subroutine_variable
+                for subroutine_variable in
+                subroutine_symbol_table.values()
+                if subroutine_variable['kind'] == kind
+            ])
             subroutine_symbol_table[name] = {
                 'name': name,
                 'type': type,
@@ -284,6 +294,8 @@ def compile_type(token_element_list: List[Element], require=True, allow_void=Fal
 def compile_class(token_element_list: List[Element]):
     # 清除class symbol table
     class_symbol_table.clear()
+    # 清除上一个class生成的vm code
+    vm_code_list.clear()
 
     class_element = Element('class')
 
@@ -436,7 +448,7 @@ def compile_subroutine_dec(token_element_list: List[Element]):
             if field_variable['kind'] == 'field'
         ]
         vm_code_list.append(
-            'push ' + str(len(field_variable_list))
+            'push constant ' + str(len(field_variable_list))
         )
         vm_code_list.append(
             'call Memory.alloc 1'
@@ -818,7 +830,7 @@ def compile_do_statement(token_element_list: List[Element]):
             compile_symbol(token_element_list, '(', require=True)
         )
 
-        expression_list_element = compile_expression_list(token_element_list)
+        expression_list_element, argument_count = compile_expression_list(token_element_list)
         do_statement_element.append(expression_list_element)
 
         do_statement_element.append(
@@ -826,7 +838,7 @@ def compile_do_statement(token_element_list: List[Element]):
         )
 
         vm_code_list.append('call ' + class_name + '.' + subroutine_name_element.text
-                            + ' ' + (len(expression_list_element) + 1)
+                            + ' ' + str(argument_count + 1)
                             )
 
     # (class/varName).subroutineName(expressionList)
@@ -856,7 +868,7 @@ def compile_do_statement(token_element_list: List[Element]):
             compile_symbol(token_element_list, '(', require=True)
         )
 
-        expression_list_element = compile_expression_list(token_element_list)
+        expression_list_element, argument_count = compile_expression_list(token_element_list)
         do_statement_element.append(expression_list_element)
 
         do_statement_element.append(
@@ -864,7 +876,7 @@ def compile_do_statement(token_element_list: List[Element]):
         )
 
         vm_code_list.append('call ' + callee_class_name + '.' + subroutine_name_element.text
-                            + ' ' + str(len(expression_list_element) + this_variable)
+                            + ' ' + str(argument_count + this_variable)
                             )
 
     else:
@@ -906,10 +918,12 @@ def compile_expression_list(token_element_list: List[Element]):
     '''
 
     expression_list_element = Element('expressionList')
+    argument_count = 0
 
     expression_element = compile_expression(token_element_list, require=False)
     if expression_element is not None:
         expression_list_element.append(expression_element)
+        argument_count = argument_count + 1
 
         while True:
             comma_symbol = compile_symbol(token_element_list, ',', require=False)
@@ -919,8 +933,9 @@ def compile_expression_list(token_element_list: List[Element]):
             expression_list_element.append(
                 compile_expression(token_element_list, require=True)
             )
+            argument_count = argument_count + 1
 
-    return expression_list_element
+    return expression_list_element, argument_count
 
 
 def compile_expression(token_element_list: List[Element], require=True):
@@ -1000,8 +1015,17 @@ def compile_term(token_element_list: List[Element], require=True):
     elif LL1_element.tag == 'stringConstant':
         term_element.append(token_element_list.pop())
 
+        string_constant = LL1_element.text
+        string_constant_length = len(string_constant)
+
         # TODO: create string object
-        # vm_code_list.append()
+        vm_code_list.append('push constant ' + str(string_constant_length))
+        vm_code_list.append('call String.new 1')
+        for string_constant_index in range(string_constant_length):
+            vm_code_list.append('push constant ' + str(
+                ord(string_constant[string_constant_index])
+            ))
+            vm_code_list.append('call String.appendChar 2')
 
     # keywordConstant
 
@@ -1042,9 +1066,10 @@ def compile_term(token_element_list: List[Element], require=True):
             variable_element = compile_identifier(token_element_list, is_variable=True)
             term_element.append(variable_element)
 
-            vm_code_list.append(
-                'push ' + variable_element.get('kind') + ' ' + variable_element.get('#')
-            )
+            push_variable(variable_element)
+            # vm_code_list.append(
+            #     'push ' + variable_element.get('kind') + ' ' + variable_element.get('#')
+            # )
 
         # varName[expression]
         elif LL2_element.tag == 'symbol' and LL2_element.text == '[':
@@ -1080,7 +1105,7 @@ def compile_term(token_element_list: List[Element], require=True):
                 compile_symbol(token_element_list, '(', require=True)
             )
 
-            expression_list_element = compile_expression_list(token_element_list)
+            expression_list_element, argument_count = compile_expression_list(token_element_list)
             term_element.append(expression_list_element)
 
             term_element.append(
@@ -1088,7 +1113,7 @@ def compile_term(token_element_list: List[Element], require=True):
             )
 
             vm_code_list.append('call ' + class_name + '.' + subroutine_name_element.text
-                                + ' ' + (len(expression_list_element) + 1)
+                                + ' ' + (argument_count + 1)
                                 )
 
         # (class/varName).subroutineName(expressionList)
@@ -1117,7 +1142,7 @@ def compile_term(token_element_list: List[Element], require=True):
                 compile_symbol(token_element_list, '(', require=True)
             )
 
-            expression_list_element = compile_expression_list(token_element_list)
+            expression_list_element, argument_count = compile_expression_list(token_element_list)
             term_element.append(expression_list_element)
 
             term_element.append(
@@ -1125,7 +1150,7 @@ def compile_term(token_element_list: List[Element], require=True):
             )
 
             vm_code_list.append('call ' + callee_class_name + '.' + subroutine_name_element.text
-                                + ' ' + str(len(expression_list_element) + this_variable)
+                                + ' ' + str(argument_count + this_variable)
                                 )
 
     # (expression)
