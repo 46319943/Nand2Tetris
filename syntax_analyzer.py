@@ -38,6 +38,7 @@ require必为False类型：所有出现的情况都是可选的
 
 vm_code_list = []
 class_name = None
+subroutine_label_index = 0
 
 
 def tokenize(lines: List[str]):
@@ -212,6 +213,7 @@ def compile_identifier(
             if name in class_symbol_table:
                 raise Exception('class symbol table duplicate')
             class_symbol_table[name] = {
+                'name': name,
                 'type': type,
                 'kind': kind,
                 '#': len(class_symbol_table)
@@ -221,6 +223,7 @@ def compile_identifier(
             if name in subroutine_symbol_table:
                 raise Exception('subroutine symbol table duplicate')
             subroutine_symbol_table[name] = {
+                'name': name,
                 'type': type,
                 'kind': kind,
                 '#': len(subroutine_symbol_table)
@@ -382,29 +385,84 @@ def compile_subroutine_dec(token_element_list: List[Element]):
         return None
     class_subroutine_dec_element.append(constructor_or_function_or_method_keyword)
 
+    function_kind = constructor_or_function_or_method_keyword.text
+
+    # when compile method, add this to argument table
+    if function_kind == 'method':
+        subroutine_symbol_table['this'] = {
+            'name': 'this',
+            'type': class_name,
+            'kind': 'argument',
+            '#': 0
+        }
+
     class_subroutine_dec_element.append(
         compile_type(token_element_list, require=True, allow_void=True)
     )
 
     # subroutineName
-    class_subroutine_dec_element.append(
-        compile_identifier(token_element_list, is_variable=False)
-    )
+    subroutine_name_element = compile_identifier(token_element_list, is_variable=False)
+    class_subroutine_dec_element.append(subroutine_name_element)
 
     class_subroutine_dec_element.append(
         compile_symbol(token_element_list, '(', require=True)
     )
 
-    class_subroutine_dec_element.append(
-        compile_parameter_list(token_element_list)
-    )
+    parameter_list_element = compile_parameter_list(token_element_list)
+    class_subroutine_dec_element.append(parameter_list_element)
 
     class_subroutine_dec_element.append(
         compile_symbol(token_element_list, ')', require=True)
     )
 
+    # local variable declare
+    subroutine_body_element_iter = compile_subroutine_body(token_element_list)
+    subroutine_body_element_iter.__next__()
+
+    local_variable_list = [
+        local_variable for local_variable in subroutine_symbol_table
+        if local_variable['kind'] == 'local'
+    ]
+
+    if function_kind == 'constructor':
+        # TODO: local variable count
+        vm_code_list.append(
+            'function ' + class_name + '.' + subroutine_name_element.text
+            + ' ' + str(len(local_variable_list))
+        )
+
+        field_variable = [variable for variable in class_symbol_table.values() if variable['kind'] == 'field']
+        vm_code_list.append(
+            'push ' + str(len(field_variable))
+        )
+        vm_code_list.append(
+            'call Memory.alloc 1'
+        )
+        vm_code_list.append(
+            'pop pointer 0'
+        )
+
+    elif function_kind == 'method':
+        vm_code_list.append(
+            'function ' + class_name + '.' + subroutine_name_element.text
+            + ' ' + str(len(local_variable_list))
+        )
+
+        vm_code_list.append(
+            'push argument 0'
+        )
+        vm_code_list.append(
+            'pop pointer 0'
+        )
+
+    elif function_kind == 'function':
+        vm_code_list.append(
+            'function ' + class_name + '.' + subroutine_name_element.text
+            + ' ' + str(len(local_variable_list))
+        )
+
     class_subroutine_dec_element.append(
-        compile_subroutine_body(token_element_list)
+        subroutine_body_element_iter.__next__()
     )
 
     return class_subroutine_dec_element
@@ -412,6 +470,7 @@ def compile_subroutine_dec(token_element_list: List[Element]):
 
 def compile_parameter_list(token_element_list: List[Element]):
     parameter_list_element = Element('parameterList')
+    parameter_count = 0
 
     type_element = compile_type(token_element_list, require=False)
     if type_element is not None:
@@ -425,6 +484,7 @@ def compile_parameter_list(token_element_list: List[Element]):
                 kind='argument'
             )
         )
+        parameter_count = parameter_count + 1
 
         while True:
             comma_symbol_element = compile_symbol(token_element_list, ',', require=False)
@@ -442,11 +502,13 @@ def compile_parameter_list(token_element_list: List[Element]):
                         kind='argument'
                     )
                 )
+                parameter_count = parameter_count + 1
 
                 continue
             else:
                 break
 
+    parameter_list_element.set('count', parameter_count)
     return parameter_list_element
 
 
@@ -462,6 +524,8 @@ def compile_subroutine_body(token_element_list: List[Element]):
         if var_dec_element is None:
             break
         subroutine_body_element.append(var_dec_element)
+
+    yield
 
     subroutine_body_element.append(
         compile_statements(token_element_list)
@@ -559,6 +623,7 @@ def compile_let_statement(token_element_list: List[Element]):
     variable_element = compile_identifier(token_element_list, is_variable=True)
     let_statement_element.append(variable_element)
 
+    # TODO: Array process
     left_brackets_symbol = compile_symbol(token_element_list, '[', require=False)
     if left_brackets_symbol is not None:
         let_statement_element.append(left_brackets_symbol)
@@ -605,10 +670,17 @@ def compile_if_statement(token_element_list: List[Element]):
         compile_symbol(token_element_list, ')', require=True)
     )
 
+    global subroutine_label_index
+    subroutine_label_index_str = str(subroutine_label_index)
+    subroutine_label_index = subroutine_label_index + 1
+    vm_code_list.append('not')
+    vm_code_list.append('if-goto IF_FALSE_' + subroutine_label_index_str)
+
     if_statement_element.append(
         compile_symbol(token_element_list, '{', require=True)
     )
 
+    # if true statements
     if_statement_element.append(
         compile_statements(token_element_list)
     )
@@ -616,6 +688,9 @@ def compile_if_statement(token_element_list: List[Element]):
     if_statement_element.append(
         compile_symbol(token_element_list, '}', require=True)
     )
+
+    vm_code_list.append('goto IF_TRUE_END_' + subroutine_label_index_str)
+    vm_code_list.append('label IF_FALSE_' + subroutine_label_index_str)
 
     else_keyword = compile_keyword(token_element_list, 'else', require=False)
     if else_keyword is not None:
@@ -625,6 +700,7 @@ def compile_if_statement(token_element_list: List[Element]):
             compile_symbol(token_element_list, '{', require=True)
         )
 
+        # if false statements
         if_statement_element.append(
             compile_statements(token_element_list)
         )
@@ -632,6 +708,8 @@ def compile_if_statement(token_element_list: List[Element]):
         if_statement_element.append(
             compile_symbol(token_element_list, '}', require=True)
         )
+
+    vm_code_list.append('label IF_TURE_END_' + subroutine_label_index_str)
 
     return if_statement_element
 
@@ -642,6 +720,12 @@ def compile_while_statement(token_element_list: List[Element]):
     while_statement_element.append(
         compile_keyword(token_element_list, 'while', require=True)
     )
+
+    global subroutine_label_index
+    subroutine_label_index_str = str(subroutine_label_index)
+    subroutine_label_index = subroutine_label_index + 1
+
+    vm_code_list.append('label WHILE_EXPRESSION_' + subroutine_label_index_str)
 
     while_statement_element.append(
         compile_symbol(token_element_list, '(', require=True)
@@ -655,10 +739,14 @@ def compile_while_statement(token_element_list: List[Element]):
         compile_symbol(token_element_list, ')', require=True)
     )
 
+    vm_code_list.append('not')
+    vm_code_list.append('if-goto WHILE_END_' + subroutine_label_index_str)
+
     while_statement_element.append(
         compile_symbol(token_element_list, '{', require=True)
     )
 
+    # while true
     while_statement_element.append(
         compile_statements(token_element_list)
     )
@@ -666,6 +754,9 @@ def compile_while_statement(token_element_list: List[Element]):
     while_statement_element.append(
         compile_symbol(token_element_list, '}', require=True)
     )
+
+    vm_code_list.append('goto WHILE_EXPRESSION_' + subroutine_label_index_str)
+    vm_code_list.append('label WHILE_END_' + subroutine_label_index_str)
 
     return while_statement_element
 
@@ -685,25 +776,43 @@ def compile_do_statement(token_element_list: List[Element]):
     if LL2_element.tag != 'symbol':
         raise Exception('LL2 symbol expected')
 
-    # subroutineName()
+    # subroutineName(expressionList) -> in class method call
     if LL2_element.text == '(':
         subroutine_name_element = compile_identifier(token_element_list, is_variable=False)
         do_statement_element.append(subroutine_name_element)
 
+        # push this to argument 0
+        vm_code_list.append('push pointer 0')
+
         do_statement_element.append(
             compile_symbol(token_element_list, '(', require=True)
         )
-        do_statement_element.append(
-            compile_expression_list(token_element_list)
-        )
+
+        expression_list_element = compile_expression_list(token_element_list)
+        do_statement_element.append(expression_list_element)
+
         do_statement_element.append(
             compile_symbol(token_element_list, ')', require=True)
         )
 
-    # className/varName.subroutineName()
+        vm_code_list.append('call ' + class_name + '.' + subroutine_name_element.text
+                            + ' ' + (len(expression_list_element) + 1)
+                            )
+
+    # (class/varName).subroutineName(expressionList)
     elif LL2_element.text == '.':
         class_or_variable_name_element = compile_identifier(token_element_list)
         do_statement_element.append(class_or_variable_name_element)
+
+        # variable.subroutineName(expressionList) -> out class method call
+        # push variable to argument 0
+        if is_variable(class_or_variable_name_element):
+            callee_class_name, _, _ = push_variable(class_or_variable_name_element)
+            this_variable = 1
+        # class.subroutineName(expressionList)
+        else:
+            callee_class_name = class_or_variable_name_element.text
+            this_variable = 0
 
         do_statement_element.append(
             compile_symbol(token_element_list, '.', require=True)
@@ -716,12 +825,17 @@ def compile_do_statement(token_element_list: List[Element]):
         do_statement_element.append(
             compile_symbol(token_element_list, '(', require=True)
         )
-        do_statement_element.append(
-            compile_expression_list(token_element_list)
-        )
+
+        expression_list_element = compile_expression_list(token_element_list)
+        do_statement_element.append(expression_list_element)
+
         do_statement_element.append(
             compile_symbol(token_element_list, ')', require=True)
         )
+
+        vm_code_list.append('call ' + callee_class_name + '.' + subroutine_name_element.text
+                            + ' ' + (len(expression_list_element) + this_variable)
+                            )
 
     else:
         raise Exception('invalid symbol text')
@@ -729,6 +843,8 @@ def compile_do_statement(token_element_list: List[Element]):
     do_statement_element.append(
         compile_symbol(token_element_list, ';', require=True)
     )
+
+    vm_code_list.append('pop temp 0')
 
     return do_statement_element
 
@@ -742,10 +858,14 @@ def compile_return_statement(token_element_list: List[Element]):
     expression_element = compile_expression(token_element_list, require=False)
     if expression_element is not None:
         return_statement_element.append(expression_element)
+    else:
+        vm_code_list.append('push constant 0')
 
     return_statement_element.append(
         compile_symbol(token_element_list, ';', require=True)
     )
+
+    vm_code_list.append('return')
 
     return return_statement_element
 
@@ -932,7 +1052,7 @@ def compile_term(token_element_list: List[Element], require=True):
             )
 
             vm_code_list.append('call ' + class_name + '.' + subroutine_name_element.text
-                                + ' ' + len(expression_list_element)
+                                + ' ' + (len(expression_list_element) + 1)
                                 )
 
         # (class/varName).subroutineName(expressionList)
@@ -944,9 +1064,11 @@ def compile_term(token_element_list: List[Element], require=True):
             # push variable to argument 0
             if is_variable(class_or_variable_name_element):
                 callee_class_name, _, _ = push_variable(class_or_variable_name_element)
+                this_variable = 1
             # class.subroutineName(expressionList)
             else:
                 callee_class_name = class_or_variable_name_element.text
+                this_variable = 0
 
             term_element.append(
                 compile_symbol(token_element_list, '.', require=True)
@@ -967,7 +1089,7 @@ def compile_term(token_element_list: List[Element], require=True):
             )
 
             vm_code_list.append('call ' + callee_class_name + '.' + subroutine_name_element.text
-                                + ' ' + len(expression_list_element)
+                                + ' ' + (len(expression_list_element) + this_variable)
                                 )
 
     # (expression)
