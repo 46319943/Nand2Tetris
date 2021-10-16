@@ -51,7 +51,7 @@ def compile_file(file_path: str):
         f.write('\n'.join(vm_code))
 
 
-if __name__ == '__main__':
+def main():
     input_path = sys.argv[1]
 
     if os.path.isdir(input_path):
@@ -65,3 +65,7 @@ if __name__ == '__main__':
     else:
         file_path = input_path
         compile_file(file_path)
+
+
+if __name__ == '__main__':
+    main()
