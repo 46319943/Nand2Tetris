@@ -44,11 +44,14 @@ class Math {
     // Returns the integer part of x / y, 
     // where x ≥ 0 and y > 0
     function int divide(int x, int y){
+        // 从结果的第一位开始，往左边位递归，逐位求结果
+        // 结果最左边的一位最先返回，直到递归返回到第一位
+    
         var int sum;
         if(x < y){
             return 0;
         }
-        // 上一位的除法结果
+        // 上一位（左边/高一位）的除法结果
         let sum = Math.divide(x, 2 * y);
         
         if((x - 2*y * sum) < y){
@@ -57,5 +60,15 @@ class Math {
         else{
             return (2*sum) + 1;
         }
+    }
+    
+    // Compute the *integer* part of sqrt(x)
+    // Strategy: find an integer y such that 
+    // y^2 <= x < (y+1)^2 (for 0 <= x < 2^n)
+    // by performing a binary search in the range 0...2^(n/2)-1
+    function int sqrt(int x){
+        var int y;
+        let y = 0;
+        
     }
 }
