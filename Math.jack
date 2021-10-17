@@ -51,7 +51,7 @@ class Math {
         // 上一位的除法结果
         let sum = Math.divide(x, 2 * y);
         
-        if((x - 2*y*sum) < y){
+        if((x - 2*y * sum) < y){
             return 2*sum;
         }
         else{
