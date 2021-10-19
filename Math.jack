@@ -19,6 +19,11 @@ class Math {
         return;
     }
     
+    // expose the twoToThe array
+    function int getTwoToThe(int i){
+        return twoToThe[i];
+    }
+    
     
     // Returns true if the i-th bit of x is 1, false otherwise
     function boolean bit(int x, int i){
