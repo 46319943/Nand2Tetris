@@ -9,7 +9,7 @@
  * consists of 32,768 words, each holding a 16-bit binary number.
  */ 
 class Memory {
-    static Array ram, freeList;
+    static Array ram, freeList, endList;
     static int heap;
 
     /** Initializes the class. */
@@ -17,10 +17,12 @@ class Memory {
         let ram = 0;
         let heap = 2048; // heap base address
         let freeList = heap;
+        let endList = heap;
         
         let freeList[0] = 0; // next list
         let freeList[1] = 14334; // free length
         
+        return;
     }
 
     /** Returns the RAM value at the given address. */
@@ -31,29 +33,41 @@ class Memory {
     /** Sets the RAM value at the given address to the given value. */
     function void poke(int address, int value) {
         let ram[address] = value;
+        return;
     }
 
     /** Finds an available RAM block of the given size and returns
      *  a reference to its base address. */
     function int alloc(int size) {
-        var Array nextList;
-        let nextList = freeList;
-        while(~(nextList = 0)){
-            if( ~(nextList[1] < (size + 2)) ){
+        var Array currentList, splitList;
+        let currentList = freeList;
+
+        while(~(currentList = 0)){
+            if( ~(currentList[1] < (size + 2)) ){
                 // enough space, split list
                 
+                // shrink size
+                let currentList[1] = currentList[1] - size - 2;
+                
+                let splitList = currentList + 2 + currentList[1];
+                let splitList[0] = 0;
+                let splitList[1] = size;
+                return splitList;
                 
             }
-            else{
             
-            }
-            
-            let nextList = nextList[0];
+            let currentList = currentList[0];
         }
+        
+        // memory exception
+        return -1;
     }
 
     /** De-allocates the given object (cast as an array) by making
      *  it available for future allocations. */
     function void deAlloc(Array o) {
+        let endList[0] = o;
+        let endList = o;
+        return;
     }    
 }

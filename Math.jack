@@ -19,6 +19,7 @@ class Math {
         return;
     }
     
+    
     // Returns true if the i-th bit of x is 1, false otherwise
     function boolean bit(int x, int i){
         return ~((x & twoToThe[i]) = 0);
