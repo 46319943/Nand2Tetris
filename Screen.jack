@@ -14,12 +14,13 @@ class Screen {
 
     /** Initializes the Screen. */
     function void init() {
-
+        let color = true;
+        return;
     }
 
     /** Erases the entire screen. */
     function void clearScreen() {
-        Screen.drawRectangle(0, 0, 512, 256);
+        do Screen.drawRectangle(0, 0, 512, 256);
         return;
     }
 
@@ -38,40 +39,56 @@ class Screen {
         let address = (x / 16) + (y * 32);
         let value = Memory.peek(16384 + address);
         // bit of value
-        let bit = x - ( x / 16);
+        let bit = x - (( x / 16) * 16);
         if(color){
-            let value = value | Matn.getTwoToThe(bit);
+            let value = value | Math.getTwoToThe(bit);
         }
         else{
-            let value = value & (~Matn.getTwoToThe(bit));
+            let value = value & (~Math.getTwoToThe(bit));
         }
-        Memory.poke(address, value);
-        
+        do Memory.poke(16384 + address, value);
+        return;
     }
 
     /** Draws a line from pixel (x1,y1) to pixel (x2,y2), using the current color. */
     function void drawLine(int x1, int y1, int x2, int y2) {
         var int a, b, x, y, dx, dy, diff;
+        var int xSign, ySign;
         let a = 0;
         let b = 0;
         
         // generalize for any direction
         let x = Math.min(x1, x2);
-        let y = Math.min(y1, y2)
-        let dx = Math.abs(x2 - x1);
-        let dy = Math.abs(y2 - y1);
+        let y = Math.min(y1, y2);
+        let dx = x2 - x1;
+        let dy = y2 - y1;
+        
+        if(dx < 0){
+            let xSign = -1;
+        }
+        else{
+            let xSign = 1;
+        }
+        if(dy < 0){
+            let ySign = -1;
+        }
+        else{
+            let ySign = 1;
+        }
+        let dx = Math.abs(dx);
+        let dy = Math.abs(dy);
         
         // horizontal and vertical special cases
         if(dx = 0){
             while(~(b>dy)){
-                Screen.drawPixel(x, y + b);
+                do Screen.drawPixel(x, y + b);
                 let b = b + 1;
             }
             return;
         }
         if(dy = 0){
             while(~(a>dx)){
-                Screen.drawPixel(x + a, y);
+                do Screen.drawPixel(x + a, y);
                 let a = a + 1;
             }
             return;
@@ -79,14 +96,16 @@ class Screen {
         
         // common case
         let diff = 0;
-        while( (~(a>dx)) & (~(b>dy)) ){
-            Screen.drawPixel(x + a, y + b);
+        while( 
+            (~(Math.abs(a)>dx)) & (~(Math.abs(b)>dy)) 
+        ){
+            do Screen.drawPixel(x1 + a, y1 + b);
             if (diff < 0){
-                let a = a + 1;
+                let a = a + xSign;
                 let diff = diff + dy;
             }
             else{
-                let b = b + 1;
+                let b = b + ySign;
                 let diff = diff - dx;
             }
         }
@@ -106,7 +125,7 @@ class Screen {
         let dy = Math.abs(y2 - y1);
         
         while(~(b>dy)){
-            Screen.drawLine(x, y+b, x+dx, y+b);
+            do Screen.drawLine(x, y+b, x+dx, y+b);
             let b = b + 1;
         }
         
@@ -119,14 +138,14 @@ class Screen {
         let dy = -r;
         while(~(dy > r)){
             // handling 
-            Screen.drawLine(
+            do Screen.drawLine(
                 Math.max(0, x - Math.sqrt((r*r) - (dy*dy))),
                 Math.min(512, Math.max(0, y + dy)),
                 Math.min(512, x + Math.sqrt((r*r) - (dy*dy))),
                 Math.min(512, Math.max(0, y + dy))
-            )
+            );
             let dy = dy + 1;
         }
-    
+        return;
     }
 }
