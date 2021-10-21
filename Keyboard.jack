@@ -64,15 +64,13 @@ class Keyboard {
         while(true){
             let c = Keyboard.readChar();
             if(c = 128){
-                do Output.println();
                 return s;
             }
             if(c = 129){
                 do s.eraseLastChar();
-                do Output.backspace();
             }
             else{
-                do s.append(c);
+                do s.appendChar(c);
             }
         }
         return s;

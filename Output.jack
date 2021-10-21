@@ -200,6 +200,8 @@ class Output {
     /** Displays the given character at the cursor location,
      *  and advances the cursor one column forward. */
     function void printChar(char c) {
+        // TODO: special char: newline, backspace
+    
         var int row, charMap, charRow, addressValue, rowAddressSum;
         let row = 0;
         let rowAddressSum = 0;
