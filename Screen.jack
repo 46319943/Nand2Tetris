@@ -20,7 +20,13 @@ class Screen {
 
     /** Erases the entire screen. */
     function void clearScreen() {
-        do Screen.drawRectangle(0, 0, 512, 256);
+        // manipulate memory to speed up
+        var int i;
+        let i = 0;
+        while(i < 8192){
+            do Memory.poke(16384 + i, 0);
+            let i = i + 1;
+        }
         return;
     }
 
@@ -35,11 +41,12 @@ class Screen {
     function void drawPixel(int x, int y) {
         // 512 columns, 256 rows.
         // 512 bit per row, 32 address per row
-        var int address, value, bit;
-        let address = 16384 + (x / 16) + (y * 32);
+        var int address, value, bit, xQuotient;
+        let xQuotient = x / 16;
+        let address = 16384 + xQuotient + (y * 32);
         let value = Memory.peek(address);
         // bit of value
-        let bit = x - (( x / 16) * 16);
+        let bit = x - (xQuotient * 16);
         if(color){
             let value = value | Math.getTwoToThe(bit);
         }
