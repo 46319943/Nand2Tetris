@@ -16,7 +16,7 @@
  */
 class Output {
     static int cursorRow, cursorColumn, cursorX, cursorY, address;
-    static boolean leftAddress;
+    static boolean highBitAddress;
     // Character map for displaying characters
     static Array charMaps; 
 
@@ -187,11 +187,11 @@ class Output {
         let cursorX = cursorColumn * 8;
         let cursorY = cursorRow * 11;
         let address = 16384 + (cursorX / 16) + (cursorY * 32);
-        if((cursorX / 16) = 8){
-            let leftAddress = false;
+        if((cursorX - ((cursorX / 16) * 16)) = 8){
+            let highBitAddress = true;
         }
         else{
-            let leftAddress = true;
+            let highBitAddress = false;
         }
         do Output.erase();
         return;
@@ -208,15 +208,15 @@ class Output {
             let charRow = charMap[row];
             let addressValue = Memory.peek(address + rowAddressSum);
             
-            if(leftAddress){
-                // left shift 8 bits
+            if(highBitAddress){
+                // shift low 8 bits to high 8 bit
                 let charRow = charRow * 256;
-                
-                // turn left 8 bit to zero by and 00000000 11111111
+
+                // turn high 8 bit to zero by and 00000000(high) 11111111(low)
                 let addressValue = addressValue & 255;
             }
             else{
-                // turn right 8 bit to zero by and 11111111 00000000
+                // turn low 8 bit to zero by and 11111111(high) 00000000(low)
                 // let addressValue = addressValue & 65280;
                 let addressValue = addressValue & (255 * 256);
             }
@@ -232,8 +232,13 @@ class Output {
     }
     
     function void advance(){
-        if(cursorColumn = 22){
-            do Output.moveCursor(cursorRow + 1, 0);
+        if(cursorColumn = 63){
+            if(cursorRow = 22){
+                do Output.moveCursor(0, 0);
+            }
+            else{
+                do Output.moveCursor(cursorRow + 1, 0);
+            }
         }
         else{
             do Output.moveCursor(cursorRow, cursorColumn + 1);
@@ -278,7 +283,7 @@ class Output {
 
     /** Moves the cursor one column back. */
     function void backSpace() {
-        do Output.moveCursor(cursorRow, cursorColumn + 1);
+        do Output.moveCursor(cursorRow, cursorColumn - 1);
         return;
     }
 }
