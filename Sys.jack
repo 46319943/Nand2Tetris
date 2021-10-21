@@ -10,27 +10,32 @@ class Sys {
 
     /** Performs all the initializations required by the OS. */
     function void init() {
-        do Math.init();
         do Memory.init();
+        do Math.init();
+        
         do Screen.init();
         do Keyboard.init();
         do Output.init();
         
-        do Main.main()
+        do Main.main();
+        do Sys.halt();
+        return;
     }
 
     /** Halts the program execution. */
     function void halt() {
         while(true){}
+        return;
     }
 
     /** Waits approximately duration milliseconds and returns.  */
     function void wait(int duration) {
         var int i;
         let i = 0;
-        while(i < duration){
+        while(i < duration * 800){
             let i = i + 1;
         }
+        return;
     }
 
     /** Displays the given error code in the form "ERR<errorCode>",
