@@ -1,0 +1,12 @@
+class Game{
+
+    field int score;
+    field grid
+
+    constructor Game new(){
+        let score = 0;
+    }
+    
+    
+    
+}
