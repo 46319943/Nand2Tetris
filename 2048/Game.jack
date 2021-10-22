@@ -1,12 +1,294 @@
 class Game{
-
+    static int gridWidth, gridHeight;
     field int score;
-    field grid
+    field Array grid, hightlightIndex;
+    
+    function void init(){
+        let gridWidth = 4;
+        let gridHeight = 3;
+        return;
+    }
 
     constructor Game new(){
+        var int i, xIndex, yIndex;
+        var Array rowGrid;
+        let i = 0;
+    
         let score = 0;
+        
+        // 4*4 grid
+        let grid = Array.new(4);
+        let grid[0] = Array.new(4);
+        let grid[1] = Array.new(4);
+        let grid[2] = Array.new(4);
+        let grid[3] = Array.new(4);
+        
+        let hightlightIndex = Array.new(16);
+        
+        // not necessary
+        while(i < 16){
+            let xIndex = i - ((i / 4) * 4);
+            let yIndex = i / 4;
+            
+            let rowGrid = grid[xIndex];
+            let rowGrid[yIndex] = 0;
+        
+            let i = i + 1;
+        }
+        
+        do generate();
+        do draw();
+        
+        do Output.moveCursor(15, 0);
+        do Output.printString("2048 Game");
+        do Output.println();
+        do Output.printString("Use arrow key to play.");
+        do Output.println();
+        do Output.printString("Highlight box represents the new generated number.");
+        do Output.println();
+        do Output.println();
+        do Output.printString("Powered by HACK hardware platform, JACK OS");
+        do Output.println();
+        do Output.printString("Developed by Piaoyang");
+        do Output.println();
+        
+        return this;
+    }
+    
+    // one char: 8*11
+    // one grid: 3*3 char = 24*33 = (22+1+1)*(31+1+1) with 1 pixel border
+    // game area: 4*4grid = 96*132
+    method void draw(){
+        var int i, xIndex, yIndex, gridOriginX, gridOriginY, gridTextX, gridTextY;
+        var Array rowGrid;
+        let i = 0;
+    
+        // black background
+        do Screen.setColor(true);
+        do Screen.drawRectangle(0, 0, 8 * gridWidth * 4, 11 * gridHeight * 4);
+        
+        while(i < 16){
+            let xIndex = i - ((i / 4) * 4);
+            let yIndex = i / 4;
+            let gridOriginX = xIndex * 8 * gridWidth;
+            let gridOriginY = yIndex * 11 * gridHeight;
+            let gridTextX = (xIndex * gridWidth) + 1;
+            let gridTextY = (yIndex * gridHeight) + 1;
+            
+            // grid background
+            if(hightlightIndex[i]){
+                do Screen.setColor(true);
+            }
+            else{
+                do Screen.setColor(false);
+            }
+            do Screen.drawRectangle(gridOriginX + 1, gridOriginY + 1, 
+                gridOriginX + (8 * gridWidth) - 2, gridOriginY + (11 * gridHeight) - 2
+                );
+            
+            // grid number
+            if(hightlightIndex[i]){
+                do Screen.setColor(false);
+            }
+            else{
+                do Screen.setColor(true);
+            }
+            // row, column
+            do Output.moveCursor(gridTextY, gridTextX);
+            let rowGrid = grid[xIndex];
+            do Output.printInt(rowGrid[yIndex]);
+            
+            let i = i + 1;
+        }
+        
+        do Output.moveCursor(22, 0);
+        do Output.printString("Score: ");
+        do Output.printInt(score);
+        
+        return;
+    }
+    
+    method int getGridInt(int x, int y){
+        var Array rowGrid;
+        let rowGrid = grid[x];
+        return rowGrid[y];
+    }
+    
+    method void setGridInt(int x, int y, int value){
+        var Array rowGrid;
+        let rowGrid = grid[x];
+        let rowGrid[y] = value;
+        return;
+    }
+    
+    method void move(int xStart, int yStart, int xDirection, int yDirection){
+        var int currentValue, currentX, currentY, lastValue, lastX, lastY;
+    
+        let currentX = xStart;
+        let currentY = yStart;
+        
+        let lastValue = 0;
+        let lastX = xStart - xDirection;
+        let lastY = yStart - yDirection;
+        
+        while((currentX < 4) & (~(currentX < 0)) & (currentY < 4) & (~(currentY < 0))){
+            let currentValue = getGridInt(currentX, currentY);
+            
+            if(currentValue = 0){
+                // do nothing
+            }
+            else{
+                // move 把非零的格子移动到上一个非零格子的下一个位置
+                
+                // next to the non-empty grid
+                do setGridInt(currentX, currentY, 0);
+                do setGridInt(lastX + xDirection, lastY + yDirection, currentValue);
+                
+                
+                // merge 如果当前格子和上一个非零格子值相同，合并
+                
+                // last and current value
+                if(lastValue = currentValue){
+                    let lastValue = lastValue + lastValue;
+                    do setGridInt(lastX, lastY, lastValue);
+                    
+                    let currentValue = 0;
+                    do setGridInt(lastX + xDirection, lastY + yDirection, 0);
+                    
+                    let score = score + lastValue;
+                }
+                else{
+                    // 合并之后，上一个格子的坐标不变
+                    // 不合并则将上一个格子坐标按方向移动
+                    let lastX = lastX + xDirection;
+                    let lastY = lastY + yDirection;
+                }
+                
+                // last update 更新上一个格子
+                let lastValue = currentValue;
+
+            }
+            
+            let currentX = currentX + xDirection;
+            let currentY = currentY + yDirection;
+        }
+        
+        return;
+    }
+    
+    method void moveDown(){
+        do move(0, 3, 0, -1);
+        do move(1, 3, 0, -1);
+        do move(2, 3, 0, -1);
+        do move(3, 3, 0, -1);
+        return;
+    }
+    
+    method void moveUp(){
+        do move(0, 0, 0, 1);
+        do move(1, 0, 0, 1);
+        do move(2, 0, 0, 1);
+        do move(3, 0, 0, 1);
+        return;
+    }
+    
+    method void moveLeft(){
+        do move(0, 0, 1, 0);
+        do move(0, 1, 1, 0);
+        do move(0, 2, 1, 0);
+        do move(0, 3, 1, 0);
+        return;
+    }
+    
+    method void moveRight(){
+        do move(3, 0, -1, 0);
+        do move(3, 1, -1, 0);
+        do move(3, 2, -1, 0);
+        do move(3, 3, -1, 0);
+        return;
+    }
+    
+    method void generate(){
+        var int i, xIndex, yIndex, random, index;
+        let i = 0;
+        let random = score;
+        do clearHightlight();
+        while(i < 16){
+            let index = i + random;
+            let index = index - ((index / 16) * 16);
+            let xIndex = index - ((index / 4) * 4);
+            let yIndex = index / 4;
+            if(getGridInt(xIndex, yIndex)=0){
+                do setGridInt(xIndex, yIndex, 2);
+                let score = score + 2;
+                let hightlightIndex[index] = true;
+                return;
+            }
+            let i = i + 1;
+        }
+        
+        // TODO: failed
+        
+        return;
+    }
+    
+    method void clearHightlight(){
+        var int i;
+        let i = 0;
+        while(i < 16){
+            let hightlightIndex[i] = false;
+            let i = i + 1;
+        }
+        return;
     }
     
     
+    method void run() {
+        var char key;
+        var boolean exit;
+
+        while (~exit) {
+            // waits for a key to be pressed.
+            while ((key = 0) & (~exit)) {
+                let key = Keyboard.keyPressed();
+                do Sys.wait(50);
+            }
+            
+            // move
+            if (key = 130) {
+                do moveLeft();
+            }
+            if (key = 131){
+                do moveUp();
+            }
+            if (key = 132) {
+                do moveRight();
+            }
+            if (key = 133){
+                do moveDown();
+            }
+            
+            do generate();
+            do draw();
+            
+            // esc
+            if (key = 140) { 
+                let exit = true; 
+            }
+
+            // Waits for the key to be released.
+            while ((~(key = 0)) & (~exit)) {
+                let key = Keyboard.keyPressed();
+                do Sys.wait(50);
+            }
+        }
+
+	    if (exit) {
+            do Output.moveCursor(10,27);
+	        do Output.printString("Game Over");
+	    }
+            
+        return;
+    }
     
 }
